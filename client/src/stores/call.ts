@@ -1,0 +1,482 @@
+import { defineStore } from 'pinia'
+import { computed, ref } from 'vue'
+import { useSessionStore } from './session'
+import { notify, vibrate } from '../utils/notify'
+
+type TurnConfig = {
+  iceServers?: Array<{ urls: string | string[]; username?: string; credential?: string }>
+}
+
+function asString(v: unknown): string | null {
+  return typeof v === 'string' ? v : null
+}
+
+function asBool(v: unknown): boolean | null {
+  return typeof v === 'boolean' ? v : null
+}
+
+function asObj(v: unknown): Record<string, unknown> | null {
+  if (!v || typeof v !== 'object') return null
+  return v as Record<string, unknown>
+}
+
+function formatDuration(ms: number) {
+  const total = Math.max(0, Math.floor(ms / 1000))
+  const m = Math.floor(total / 60)
+  const s = total % 60
+  const mm = String(m).padStart(2, '0')
+  const ss = String(s).padStart(2, '0')
+  return `${mm}:${ss}`
+}
+
+function micErrorToStatus(err: unknown) {
+  const name = (asObj(err)?.name as string | undefined) ?? ''
+  if (name === 'NotAllowedError' || name === 'SecurityError') return 'Microphone permission denied.'
+  if (name === 'NotFoundError') return 'No microphone found.'
+  if (name === 'NotReadableError') return 'Microphone is in use.'
+  return 'Microphone error.'
+}
+
+export const useCallStore = defineStore('call', () => {
+  const session = useSessionStore()
+
+  const roomId = ref<string | null>(null)
+  const status = ref<string>('')
+
+  const pendingIncomingFrom = ref<string | null>(null)
+  const pendingIncomingFromName = ref<string>('')
+  const pendingIncomingRoomId = ref<string | null>(null)
+
+  const outgoingPending = ref(false)
+  const outgoingPendingName = ref('')
+
+  const timerStartMs = ref<number | null>(null)
+  const timerText = ref('00:00')
+
+  const remoteStreams = ref<Record<string, MediaStream>>({})
+
+  const peerNames = new Map<string, string>()
+  const pcs = new Map<string, RTCPeerConnection>()
+
+  let localStream: MediaStream | null = null
+  let timerInterval: number | null = null
+  let handlerInstalled = false
+
+  let ringtoneCtx: AudioContext | null = null
+  let ringtoneOsc: OscillatorNode | null = null
+  let ringtoneGain: GainNode | null = null
+  let ringtoneInterval: number | null = null
+
+  const inCall = computed(() => Boolean(roomId.value))
+  const peers = computed(() => Array.from(peerNames.entries()).map(([id, name]) => ({ id, name })))
+
+  const callLabel = computed(() => {
+    const names = peers.value.map((p) => p.name).filter(Boolean)
+    if (names.length === 0) return 'Not in call'
+    return `In call: ${names.join(', ')}`
+  })
+
+  function updateTimer() {
+    if (timerStartMs.value == null) return
+    timerText.value = formatDuration(Date.now() - timerStartMs.value)
+  }
+
+  function startTimerIfNeeded() {
+    if (timerStartMs.value != null) return
+    timerStartMs.value = Date.now()
+    updateTimer()
+    if (timerInterval != null) window.clearInterval(timerInterval)
+    timerInterval = window.setInterval(updateTimer, 1000)
+  }
+
+  function resetTimer() {
+    if (timerInterval != null) window.clearInterval(timerInterval)
+    timerInterval = null
+    timerStartMs.value = null
+    timerText.value = '00:00'
+  }
+
+  function startRingtone() {
+    try {
+      stopRingtone()
+      ringtoneCtx = new (window.AudioContext || (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext!)()
+      ringtoneOsc = ringtoneCtx.createOscillator()
+      ringtoneGain = ringtoneCtx.createGain()
+      ringtoneOsc.type = 'sine'
+      ringtoneOsc.frequency.value = 880
+      ringtoneGain.gain.value = 0.0
+      ringtoneOsc.connect(ringtoneGain)
+      ringtoneGain.connect(ringtoneCtx.destination)
+      ringtoneOsc.start()
+
+      let on = false
+      ringtoneInterval = window.setInterval(() => {
+        if (!ringtoneCtx || !ringtoneGain) return
+        on = !on
+        ringtoneGain.gain.setTargetAtTime(on ? 0.08 : 0.0, ringtoneCtx.currentTime, 0.01)
+      }, 350)
+    } catch {
+      // ignore
+    }
+  }
+
+  function stopRingtone() {
+    try {
+      if (ringtoneInterval != null) window.clearInterval(ringtoneInterval)
+      ringtoneInterval = null
+      ringtoneOsc?.stop()
+      ringtoneOsc?.disconnect()
+      ringtoneGain?.disconnect()
+      ringtoneCtx?.close()
+    } catch {
+      // ignore
+    } finally {
+      ringtoneCtx = null
+      ringtoneOsc = null
+      ringtoneGain = null
+    }
+  }
+
+  async function ensureMic() {
+    if (localStream) return localStream
+    localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false })
+    return localStream
+  }
+
+  function closePeer(peerId: string) {
+    const pc = pcs.get(peerId)
+    if (pc) {
+      try {
+        pc.onicecandidate = null
+        pc.ontrack = null
+        pc.onconnectionstatechange = null
+        pc.close()
+      } catch {
+        // ignore
+      }
+    }
+    pcs.delete(peerId)
+
+    const streams = { ...remoteStreams.value }
+    delete streams[peerId]
+    remoteStreams.value = streams
+
+    peerNames.delete(peerId)
+  }
+
+  function resetCallState() {
+    stopRingtone()
+    for (const id of Array.from(pcs.keys())) closePeer(id)
+
+    peerNames.clear()
+    roomId.value = null
+
+    pendingIncomingFrom.value = null
+    pendingIncomingFromName.value = ''
+    pendingIncomingRoomId.value = null
+
+    outgoingPending.value = false
+    outgoingPendingName.value = ''
+
+    resetTimer()
+
+    try {
+      localStream?.getTracks().forEach((t) => t.stop())
+    } catch {
+      // ignore
+    }
+    localStream = null
+  }
+
+  async function ensurePeerConnection(peerId: string) {
+    const existing = pcs.get(peerId)
+    if (existing) return existing
+
+    const ice = session.turnConfig as unknown as TurnConfig | null
+    const pc = new RTCPeerConnection(ice ?? undefined)
+    pcs.set(peerId, pc)
+
+    pc.onicecandidate = (ev) => {
+      if (!ev.candidate) return
+      session.send({ type: 'signal', to: peerId, payload: { kind: 'ice', candidate: ev.candidate } })
+    }
+
+    pc.ontrack = (ev) => {
+      const stream = ev.streams?.[0]
+      if (!stream) return
+      remoteStreams.value = { ...remoteStreams.value, [peerId]: stream }
+    }
+
+    const stream = await ensureMic()
+    for (const track of stream.getTracks()) {
+      pc.addTrack(track, stream)
+    }
+
+    pc.addEventListener('connectionstatechange', () => {
+      if (!pcs.has(peerId)) return
+      if (pc.connectionState === 'connected') {
+        startTimerIfNeeded()
+        if (status.value !== 'Connected') status.value = 'Connected'
+      }
+      if (pc.connectionState === 'failed' || pc.connectionState === 'closed') {
+        closePeer(peerId)
+        if (peerNames.size === 0) resetCallState()
+      }
+    })
+
+    return pc
+  }
+
+  async function startCall(toId: string, toName: string) {
+    try {
+      await ensureMic()
+    } catch (err) {
+      status.value = micErrorToStatus(err)
+      return
+    }
+
+    peerNames.set(toId, toName)
+
+    if (!roomId.value) {
+      outgoingPending.value = true
+      outgoingPendingName.value = toName
+      status.value = toName ? `Calling ${toName}…` : 'Calling…'
+    } else {
+      status.value = 'Inviting…'
+    }
+
+    session.send({ type: 'callStart', to: toId })
+  }
+
+  function hangup() {
+    session.send({ type: 'callHangup' })
+    status.value = 'Call ended.'
+    stopRingtone()
+    resetCallState()
+  }
+
+  async function acceptIncoming() {
+    if (!pendingIncomingFrom.value) return
+
+    try {
+      await ensureMic()
+    } catch (err) {
+      status.value = micErrorToStatus(err)
+      return
+    }
+
+    stopRingtone()
+    status.value = 'Connecting…'
+    session.send({
+      type: 'callAccept',
+      from: pendingIncomingFrom.value,
+      roomId: pendingIncomingRoomId.value,
+    })
+
+    pendingIncomingFrom.value = null
+    pendingIncomingFromName.value = ''
+    pendingIncomingRoomId.value = null
+  }
+
+  function rejectIncoming() {
+    stopRingtone()
+    if (pendingIncomingFrom.value) {
+      session.send({
+        type: 'callReject',
+        from: pendingIncomingFrom.value,
+        roomId: pendingIncomingRoomId.value,
+      })
+    }
+
+    pendingIncomingFrom.value = null
+    pendingIncomingFromName.value = ''
+    pendingIncomingRoomId.value = null
+    status.value = ''
+  }
+
+  async function handleInbound(type: string, obj: Record<string, unknown>) {
+    if (type === 'incomingCall') {
+      pendingIncomingFrom.value = asString(obj.from)
+      pendingIncomingFromName.value = asString(obj.fromName) ?? ''
+      pendingIncomingRoomId.value = asString(obj.roomId)
+      status.value = pendingIncomingFromName.value
+        ? `Incoming call: ${pendingIncomingFromName.value}`
+        : 'Incoming call'
+
+      // Best-effort alerts (no permission prompts here).
+      startRingtone()
+      notify('Incoming call', pendingIncomingFromName.value ? `From ${pendingIncomingFromName.value}` : 'Incoming call', { tag: 'lrcom-call' })
+      vibrate([200, 100, 200, 100, 400])
+      return
+    }
+
+    if (type === 'callStartResult') {
+      const ok = asBool(obj.ok)
+      const reason = asString(obj.reason) ?? ''
+      if (!ok) {
+        if (outgoingPending.value && !roomId.value) {
+          outgoingPending.value = false
+          outgoingPendingName.value = ''
+          status.value = `Call failed: ${reason}`
+        }
+      } else {
+        if (outgoingPending.value && !roomId.value) {
+          status.value = outgoingPendingName.value ? `Ringing ${outgoingPendingName.value}…` : 'Ringing…'
+        }
+      }
+      return
+    }
+
+    if (type === 'callRejected') {
+      if (outgoingPending.value && !roomId.value) {
+        outgoingPending.value = false
+        outgoingPendingName.value = ''
+        status.value = 'Call rejected.'
+      }
+      if (!roomId.value) resetCallState()
+      return
+    }
+
+    if (type === 'callEnded') {
+      status.value = 'Call ended.'
+      resetCallState()
+      return
+    }
+
+    if (type === 'roomPeers') {
+      roomId.value = asString(obj.roomId) ?? roomId.value
+      outgoingPending.value = false
+      outgoingPendingName.value = ''
+
+      const peersArr = Array.isArray(obj.peers) ? (obj.peers as unknown[]) : []
+      try {
+        for (const p of peersArr) {
+          const po = asObj(p)
+          if (!po) continue
+          const id = asString(po.id)
+          if (!id || id === session.myId) continue
+          const name = asString(po.name) ?? ''
+          peerNames.set(id, name)
+          await ensurePeerConnection(id)
+        }
+      } catch (err) {
+        status.value = micErrorToStatus(err)
+        hangup()
+        return
+      }
+
+      status.value = 'Connecting…'
+      return
+    }
+
+    if (type === 'roomPeerJoined') {
+      roomId.value = asString(obj.roomId) ?? roomId.value
+      const peerObj = asObj(obj.peer)
+      const peerId = peerObj ? asString(peerObj.id) : null
+      if (!peerId || peerId === session.myId) return
+      const peerName = peerObj ? (asString(peerObj.name) ?? '') : ''
+      peerNames.set(peerId, peerName)
+
+      let pc: RTCPeerConnection
+      try {
+        pc = await ensurePeerConnection(peerId)
+      } catch (err) {
+        status.value = micErrorToStatus(err)
+        hangup()
+        return
+      }
+
+      status.value = 'Connecting…'
+      const offer = await pc.createOffer({ offerToReceiveAudio: true, offerToReceiveVideo: false })
+      await pc.setLocalDescription(offer)
+      session.send({ type: 'signal', to: peerId, payload: { kind: 'offer', sdp: offer } })
+      return
+    }
+
+    if (type === 'roomPeerLeft') {
+      const peerId = asString(obj.peerId)
+      if (peerId) closePeer(peerId)
+      if (peerNames.size === 0) resetCallState()
+      return
+    }
+
+    if (type === 'signal') {
+      const payloadObj = asObj(obj.payload)
+      const kind = payloadObj ? asString(payloadObj.kind) : null
+      const fromId = asString(obj.from)
+      const fromName = asString(obj.fromName)
+      if (fromId && fromName) peerNames.set(fromId, fromName)
+      if (!payloadObj || !kind || !fromId) return
+
+      if (kind === 'offer') {
+        const sdp = payloadObj.sdp as RTCSessionDescriptionInit
+        let pc: RTCPeerConnection
+        try {
+          pc = await ensurePeerConnection(fromId)
+        } catch (err) {
+          status.value = micErrorToStatus(err)
+          hangup()
+          return
+        }
+        await pc.setRemoteDescription(sdp)
+        const answer = await pc.createAnswer()
+        await pc.setLocalDescription(answer)
+        session.send({ type: 'signal', to: fromId, payload: { kind: 'answer', sdp: answer } })
+        return
+      }
+
+      if (kind === 'answer') {
+        const pc = pcs.get(fromId)
+        if (!pc) return
+        const sdp = payloadObj.sdp as RTCSessionDescriptionInit
+        await pc.setRemoteDescription(sdp)
+        status.value = 'Connected'
+        return
+      }
+
+      if (kind === 'ice') {
+        const pc = pcs.get(fromId)
+        if (!pc) return
+        try {
+          await pc.addIceCandidate(payloadObj.candidate as RTCIceCandidateInit)
+        } catch {
+          // ignore
+        }
+      }
+    }
+  }
+
+  function installHandler() {
+    if (handlerInstalled) return
+    handlerInstalled = true
+
+    session.registerInboundHandler((type, obj) => {
+      void handleInbound(type, obj)
+    })
+
+    session.registerDisconnectHandler(() => {
+      resetCallState()
+      status.value = ''
+    })
+  }
+
+  installHandler()
+
+  return {
+    roomId,
+    status,
+    inCall,
+    peers,
+    callLabel,
+    pendingIncomingFrom,
+    pendingIncomingFromName,
+    outgoingPending,
+    outgoingPendingName,
+    timerText,
+    remoteStreams,
+    startCall,
+    acceptIncoming,
+    rejectIncoming,
+    hangup,
+  }
+})
