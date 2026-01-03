@@ -20,7 +20,7 @@ self.addEventListener('push', (event) => {
 
   const title = data.title || 'Last';
   const body = data.body || '';
-  const tag = data.tag || 'lrcom';
+  const tag = data.tag || 'last';
   const url = data.url || '/';
   const requireInteraction = Boolean(data.requireInteraction);
   const vibrate = Array.isArray(data.vibrate) ? data.vibrate : [200, 100, 200];

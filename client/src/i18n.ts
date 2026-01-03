@@ -61,7 +61,7 @@ export const messages = {
     about: {
       title: 'About',
       description:
-        'Last is an ephemeral, registration-less, audio-only WebRTC communicator. No accounts, no cookies, no saved sessions.',
+        'Last is a free, anonymous, ephemeral web messenger with open source code. This means it requires no installation or registration, is not tied to a phone number, email, or name, does not store logs, messages, or logins, does not create sessions or cookies, and does not collect any analytics. Any person or company can create an isolated copy of this app for their own communication needs.<br>Voice communication is encrypted, and chat messages are sent over an SSL-encrypted channel. (In the next version, messaging will also be wrapped in an additional client-to-client encryption layer to prevent access via server attacks).<br>What is implemented so far:<br>1. Group chat and private chats.<br>2. Voice calls<br>3. Group voice calls<br>4. Multiple languages.<br>What are the downsides of this approach?<br>1. No message history. It is not stored even on your device. Close the tab and open it again — everything disappears.<br>2. You cannot write to or call someone who is offline. Your messages are received only by those who are online right now. If you wrote to someone and later you and your interlocutor left, then those messages no longer exist. Communication is therefore session-based: agree with someone in advance, talk, and leave. You can also not leave and simply stay online all the time.<br>3. You may not know who exactly you are talking to. All that is required to enter is an arbitrary nickname, so the responsibility for understanding the identity of the other person lies entirely with the user.<br>4. (In the current version) Communication in a narrow circle. You do not have a list of personal contacts. You see everyone who is online right now, so a single instance* of the app is not designed for mass use by millions or even thousands of users. There are also limits on how many audio conferences can be supported by the server at the same time.<br>*An app instance is a copy that runs on any private server and is available via one or more web addresses or an IP. A group of users is therefore united only by knowing this address. The number of instances is unlimited.<br>The developer of the application is not responsible for how it is used and what data is transmitted through it. The application code may be copied and modified by anyone for their own needs provided that a link to the original repository is kept in the "About" section. The full license text is available in Git.',
       repoLink: 'Git repository',
     },
     theme: {
@@ -178,7 +178,7 @@ export const messages = {
     about: {
       title: 'Over',
       description:
-        'Last is een tijdelijk, registratievrij, audio-only WebRTC-communicatiemiddel. Geen accounts, geen cookies, geen opgeslagen sessies.',
+        'Last is een gratis, anonieme, tijdelijke webmessenger met open source-code. Dit betekent dat er geen installatie of registratie nodig is, dat het niet gekoppeld is aan een telefoonnummer, e-mail of naam, geen logs, gesprekken of logins opslaat, geen sessies of cookies aanmaakt en geen statistieken verzamelt. Iedereen (personen of bedrijven) kan een geïsoleerde kopie van deze app opzetten voor eigen communicatiedoeleinden.<br>Spraakcommunicatie is versleuteld en berichten worden verstuurd via een met SSL versleuteld kanaal. (In de volgende versie wordt de berichtendienst ook voorzien van een extra client-naar-client versleutelingslaag om toegang via aanvallen op servers te voorkomen).<br>Wat is er op dit moment gerealiseerd:<br>1. Groepschat en privéchats.<br>2. Spraakgesprekken<br>3. Groepsspraakgesprekken<br>4. Meerdere talen.<br>Wat zijn de nadelen van deze aanpak?<br>1. Geen gespreksgeschiedenis. Die wordt zelfs niet op je apparaat opgeslagen. Tabblad sluiten en opnieuw openen — alles is verdwenen.<br>2. Je kunt geen bericht sturen of bellen naar iemand die niet online is. Je berichten worden alleen ontvangen door mensen die nu online zijn. Als je iemand iets hebt gestuurd en daarna jij en je gesprekspartner offline gaan, bestaan die berichten niet meer. Communicatie is dus sessiegebonden: spreek vooraf af, praat, en ga weer weg. Je kunt ook gewoon online blijven.<br>3. Je weet mogelijk niet met wie je precies praat. Voor toegang is alleen een willekeurige nickname nodig, dus de verantwoordelijkheid om de identiteit van de ander te begrijpen ligt volledig bij de gebruiker.<br>4. (In de huidige versie) Communicatie in een kleine kring. Je hebt geen lijst met persoonlijke contacten. Je ziet iedereen die nu online is, dus één app-instantie* is niet bedoeld voor massaal gebruik door miljoenen of zelfs duizenden gebruikers. Ook zijn er grenzen aan hoeveel audioconferenties de server tegelijkertijd kan ondersteunen.<br>*Een app-instantie is een kopie die op een private server draait en bereikbaar is via één of meerdere webadressen of een IP-adres. Een groep gebruikers wordt dus alleen verbonden door het kennen van dat adres. Het aantal instanties is onbeperkt.<br>De ontwikkelaar van de applicatie is niet verantwoordelijk voor hoe deze wordt gebruikt en welke gegevens er via worden verzonden. De code van de applicatie mag door iedereen worden gekopieerd en aangepast voor eigen gebruik, mits de link naar de oorspronkelijke repository behouden blijft in de sectie "Over". De volledige licentie is beschikbaar in Git.',
       repoLink: 'Git-repository',
     },
     theme: {
@@ -199,8 +199,8 @@ export const messages = {
     chat: {
       typeMessage: 'Typ een bericht...',
       replying: 'Antwoorden',
-      replyingTo: 'Antwoord aan {name}',
-      replyTo: 'Antwoord aan {name}',
+      replyingTo: 'Antwoorden aan {name}',
+      replyTo: 'Antwoorden aan {name}',
       joinOngoingTitle: 'Deelnemen aan lopend gesprek?',
       joinOngoingBodyNamed: 'Je probeert deel te nemen aan het lopende gesprek van {name}.',
       joinOngoingBody: 'Je probeert deel te nemen aan een lopend gesprek.',
@@ -213,10 +213,10 @@ export const messages = {
       incomingFromLabel: 'Inkomende oproep van',
       incomingFrom: 'Inkomende oproep van {name}',
       unknown: 'Onbekend',
-      waitingToJoinNamed: 'Wachten om deel te nemen aan {name}…',
-      waitingToJoin: 'Wachten om deel te nemen…',
-      requestingToJoinNamed: 'Verzoek om deel te nemen aan {name}…',
-      requestingToJoin: 'Verzoek om deel te nemen…',
+      waitingToJoinNamed: 'Wachten om aan te sluiten bij {name}…',
+      waitingToJoin: 'Wachten om aan te sluiten…',
+      requestingToJoinNamed: 'Verzoek om aan te sluiten bij {name}…',
+      requestingToJoin: 'Verzoek om aan te sluiten…',
       calling: 'Bellen…',
       callingNamed: 'Bellen {name}…',
       ringing: 'Overgaan…',
@@ -234,8 +234,8 @@ export const messages = {
       from: 'Van {name}',
       accept: 'Accepteren',
       reject: 'Weigeren',
-      cancelRequest: 'Verzoek annuleren',
-      addToCall: 'Toevoegen aan gesprek',
+      cancelRequest: 'Verzoek intrekken',
+      addToCall: 'Aan gesprek toevoegen',
       hangUp: 'Ophangen',
       joinRequestNamed: '{name} wil deelnemen aan dit gesprek.',
       joinRequestSomeone: 'Iemand wil deelnemen aan dit gesprek.',
@@ -255,8 +255,8 @@ export const messages = {
       udpRelayPortsRatio: 'UDP relay-poorten ~{used}/{total}',
       udpRelayPortsTotal: 'UDP relay-poorten {total}',
       udpRelayPortsUsed: 'UDP relay-poorten in gebruik ~{used}',
-      estConfMax: 'schatting conf max ~{users} gebruikers',
-      estCallsMax: 'schatting 1:1 max ~{calls} gesprekken',
+      estConfMax: 'schatting: max. ~{users} gebruikers',
+      estCallsMax: 'schatting: max. ~{calls} 1:1-gesprekken',
     },
     confirm: {
       leave: 'Uitloggen en {appName} verlaten?',
@@ -295,7 +295,7 @@ export const messages = {
     about: {
       title: 'À propos',
       description:
-        "Last est un outil WebRTC éphémère, sans inscription, audio uniquement. Pas de comptes, pas de cookies, pas de sessions enregistrées.",
+        "Last est une messagerie web éphémère, gratuite et anonyme, dont le code est open source. Cela signifie qu’elle ne nécessite ni installation ni inscription, qu’elle n’est liée ni à un numéro de téléphone ni à une adresse e-mail ni à un nom, qu’elle ne conserve pas de journaux, de conversations ni d’identifiants, qu’elle ne crée pas de sessions ni de cookies et qu’elle ne collecte aucune statistique. Toute personne ou entreprise peut déployer une copie isolée de cette application pour ses besoins de communication.<br>Les communications vocales sont chiffrées, et les messages transitent via un canal chiffré SSL. (Dans la prochaine version, la messagerie sera également enveloppée d’une couche de chiffrement supplémentaire client-à-client afin d’empêcher l’accès via des attaques sur les serveurs).<br>Ce qui est actuellement disponible :<br>1. Chat général et chats privés.<br>2. Appels vocaux<br>3. Appels vocaux de groupe<br>4. Multilingue.<br>Quels sont les inconvénients de cette approche ?<br>1. Pas d’historique de conversation. Il n’est pas conservé, même sur votre appareil. Fermez l’onglet et rouvrez-le : tout disparaît.<br>2. Vous ne pouvez pas écrire ou appeler quelqu’un qui n’est pas en ligne. Vos messages ne sont reçus que par les personnes actuellement connectées. Si vous avez écrit à quelqu’un puis que vous et votre interlocuteur vous êtes déconnectés, ces messages n’existent plus. La communication est donc de type « session » : convenez d’un moment à l’avance, discutez, puis quittez. Vous pouvez aussi rester en ligne en permanence.<br>3. Vous ne savez pas forcément avec qui vous échangez. Pour entrer, un pseudonyme arbitraire suffit ; la responsabilité de comprendre l’identité de l’interlocuteur revient donc entièrement à l’utilisateur.<br>4. (Dans la version actuelle) Communication dans un cercle restreint. Vous n’avez pas de liste de contacts personnels. Vous voyez toutes les personnes en ligne ; une seule instance* de l’application n’est donc pas conçue pour un usage massif par des millions, voire des milliers d’utilisateurs. Il existe aussi des limites au nombre de conférences audio pouvant être prises en charge simultanément par le serveur.<br>*Une instance de l’application est une copie qui tourne sur un serveur privé et qui est accessible via une ou plusieurs adresses web ou une adresse IP. Un groupe d’utilisateurs est donc lié uniquement par la connaissance de cette adresse. Le nombre d’instances n’est pas limité.<br>Le développeur de l’application n’est pas responsable de la manière dont elle est utilisée ni des données qui y transitent. Le code de l’application peut être copié et modifié par quiconque pour ses besoins, à condition de conserver un lien vers le dépôt d’origine dans la section « À propos ». Le texte complet de la licence est disponible dans Git.",
       repoLink: 'Dépôt Git',
     },
     theme: {
@@ -315,7 +315,7 @@ export const messages = {
     },
     chat: {
       typeMessage: 'Écrivez un message...',
-      replying: 'Réponse',
+      replying: 'En réponse',
       replyingTo: 'Réponse à {name}',
       replyTo: 'Réponse à {name}',
       joinOngoingTitle: "Rejoindre l'appel en cours ?",
@@ -372,8 +372,8 @@ export const messages = {
       udpRelayPortsRatio: 'Ports relais UDP ~{used}/{total}',
       udpRelayPortsTotal: 'Ports relais UDP {total}',
       udpRelayPortsUsed: 'Ports relais UDP utilisés ~{used}',
-      estConfMax: 'est conf max ~{users} utilisateurs',
-      estCallsMax: 'est 1:1 max ~{calls} appels',
+      estConfMax: 'estimation : max ~{users} utilisateurs',
+      estCallsMax: 'estimation : max ~{calls} appels 1:1',
     },
     confirm: {
       leave: 'Se déconnecter et quitter {appName} ?',
@@ -389,16 +389,16 @@ export const messages = {
 
   de: {
     common: {
-      about: 'Info',
+      about: 'Über',
       close: 'Schließen',
       cancel: 'Abbrechen',
       proceed: 'Fortfahren',
       reply: 'Antworten',
       send: 'Senden',
       settings: 'Einstellungen',
-      users: 'Benutzer',
+      users: 'Nutzer',
       online: 'Online',
-      busy: 'beschäftigt',
+      busy: 'besetzt',
       language: 'Sprache',
       unreadMessages: 'Ungelesene Nachrichten',
       logout: 'Abmelden',
@@ -410,17 +410,17 @@ export const messages = {
       join: 'Beitreten',
     },
     about: {
-      title: 'Info',
+      title: 'Über',
       description:
-        'Last ist ein flüchtiger, registrierungsfreier, reiner Audio-WebRTC-Kommunikator. Keine Konten, keine Cookies, keine gespeicherten Sitzungen.',
+        'Last ist ein kostenloser, anonymer, kurzlebiger Web-Messenger mit offenem Quellcode. Das bedeutet: keine Installation, keine Registrierung, keine Bindung an Telefonnummer, E-Mail oder Namen, keine Speicherung von Logs, Chats oder Logins, keine Sessions oder Cookies und keine Erhebung von Statistiken. Jede Person oder jedes Unternehmen kann eine isolierte Kopie dieser Anwendung für eigene Kommunikationszwecke betreiben.<br>Sprachkommunikation ist verschlüsselt, und Nachrichten werden über einen SSL-verschlüsselten Kanal übertragen. (In der nächsten Version wird die Nachrichtenübertragung zusätzlich in eine weitere Client-zu-Client-Verschlüsselungsschicht eingebettet, um Zugriffe durch Serverangriffe zu verhindern).<br>Derzeit umgesetzt:<br>1. Gruppenchat und private Chats.<br>2. Sprachanrufe<br>3. Gruppen-Sprachanrufe<br>4. Mehrsprachigkeit.<br>Was sind die Nachteile dieses Ansatzes?<br>1. Keine Chat-Historie. Sie wird nicht einmal auf deinem Gerät gespeichert. Tab schließen und neu öffnen – alles ist weg.<br>2. Du kannst niemandem schreiben oder ihn anrufen, der nicht online ist. Nachrichten erhalten nur Personen, die gerade online sind. Wenn du jemandem geschrieben hast und später du und dein Gesprächspartner offline geht, existieren diese Nachrichten nicht mehr. Kommunikation hat also Session-Charakter: vorher verabreden, sprechen und wieder gehen. Du kannst auch einfach dauerhaft online bleiben.<br>3. Du weißt möglicherweise nicht, mit wem genau du sprichst. Für den Einstieg reicht ein beliebiger Nickname – die Verantwortung, die Identität des Gegenübers einzuordnen, liegt vollständig beim Nutzer.<br>4. (In der aktuellen Version) Kommunikation in einem kleinen Kreis. Es gibt keine persönliche Kontaktliste. Du siehst alle, die gerade online sind; eine einzelne App-Instanz* ist daher nicht für die massenhafte Nutzung durch Millionen oder sogar Tausende Nutzer ausgelegt. Außerdem gibt es Grenzen dafür, wie viele Audio-Konferenzen der Server gleichzeitig unterstützen kann.<br>*Eine App-Instanz ist eine Kopie, die auf einem privaten Server läuft und über eine oder mehrere Web-Adressen oder eine IP erreichbar ist. Eine Nutzergruppe wird somit nur durch die Kenntnis dieser Adresse verbunden. Die Anzahl der Instanzen ist nicht begrenzt.<br>Der Entwickler der Anwendung übernimmt keine Verantwortung dafür, wie sie genutzt wird und welche Daten darüber übertragen werden. Der Quellcode der Anwendung darf von jedem für eigene Zwecke kopiert und verändert werden, sofern in der Rubrik „Über“ ein Link zum ursprünglichen Repository erhalten bleibt. Die vollständige Lizenz ist in Git verfügbar.',
       repoLink: 'Git-Repository',
     },
     theme: {
-      label: 'Theme: {mode}',
+      label: 'Thema: {mode}',
       system: 'System',
       dark: 'Dunkel',
       light: 'Hell',
-      toggleAria: 'Theme wechseln',
+      toggleAria: 'Thema wechseln',
     },
     settings: {
       title: 'Einstellungen',
@@ -432,10 +432,10 @@ export const messages = {
     },
     chat: {
       typeMessage: 'Nachricht schreiben...',
-      replying: 'Antwort',
+      replying: 'Antworten',
       replyingTo: 'Antwort an {name}',
       replyTo: 'Antwort an {name}',
-      joinOngoingTitle: 'Laufendem Anruf beitreten?',
+      joinOngoingTitle: 'Einem laufenden Anruf beitreten?',
       joinOngoingBodyNamed: 'Du versuchst, dem laufenden Anruf von {name} beizutreten.',
       joinOngoingBody: 'Du versuchst, einem laufenden Anruf beizutreten.',
       callAria: 'Anrufen',
@@ -449,8 +449,8 @@ export const messages = {
       unknown: 'Unbekannt',
       waitingToJoinNamed: 'Warten auf Beitritt zu {name}…',
       waitingToJoin: 'Warten auf Beitritt…',
-      requestingToJoinNamed: 'Anfrage zum Beitritt zu {name}…',
-      requestingToJoin: 'Anfrage zum Beitritt…',
+      requestingToJoinNamed: 'Beitritt zu {name} anfragen…',
+      requestingToJoin: 'Beitritt anfragen…',
       calling: 'Rufe an…',
       callingNamed: 'Rufe {name} an…',
       ringing: 'Klingeln…',
@@ -468,7 +468,7 @@ export const messages = {
       from: 'Von {name}',
       accept: 'Annehmen',
       reject: 'Ablehnen',
-      cancelRequest: 'Anfrage abbrechen',
+      cancelRequest: 'Anfrage zurückziehen',
       addToCall: 'Zum Anruf hinzufügen',
       hangUp: 'Auflegen',
       joinRequestNamed: '{name} möchte diesem Anruf beitreten.',
@@ -489,8 +489,8 @@ export const messages = {
       udpRelayPortsRatio: 'UDP-Relay-Ports ~{used}/{total}',
       udpRelayPortsTotal: 'UDP-Relay-Ports {total}',
       udpRelayPortsUsed: 'UDP-Relay-Ports in Benutzung ~{used}',
-      estConfMax: 'geschätzt conf max ~{users} Benutzer',
-      estCallsMax: 'geschätzt 1:1 max ~{calls} Anrufe',
+      estConfMax: 'Schätzung: max. ~{users} Nutzer',
+      estCallsMax: 'Schätzung: max. ~{calls} 1:1-Anrufe',
     },
     confirm: {
       leave: '{appName} verlassen und abmelden?',
@@ -521,7 +521,7 @@ export const messages = {
       logout: 'Выйти',
     },
     setup: {
-      subtitle: 'Без аккаунтов, без куки, без сохранённых сессий.',
+      subtitle: 'Без аккаунтов, без cookie, без сохранённых сессий.',
       yourName: 'Ваше имя',
       namePlaceholder: 'напр. Алекс',
       join: 'Присоединиться',
@@ -529,8 +529,8 @@ export const messages = {
     about: {
       title: 'О приложении',
       description:
-        'Last — это временный, без регистрации, аудио‑только WebRTC‑коммуникатор. Без аккаунтов, без куки, без сохранённых сессий.',
-      repoLink: 'Git-репозиторий',
+        'Last — это анонимный бесплатный эфемерный веб мессенджер с открытым исходным кодом. Это означает, что он не трубет установки и регистрации, не привязан ни к номеру, ни к почте или имени, не сохраняет логи, переписки, логины, не создает сессии, куки и не собирает никакую статистику. Любой человек или компанию могут создать свою изолированную копию это приложения для персональных нужд коммуникации.<br>Голосовое общение зашифровано, а переписка осуществляется через SSL зашифрованный канал. (в следующей версии также будет обернуто в дополнительный слой шифрования клиент-клиент для предостращения доступа посредством атаки серверов).<br>Что на данный момен реализовано:<br>1. Общий чат и приватные чаты.<br>2. Голосовая связь<br>3. Групповая голосовая связь<br>4. Мультиязычность.<br>Какие минусы такого подхода?<br>1. Отсутвие истории переписки. Она не храниться даже на вашем устройстве. Закрыли вкладку и зашли заново - все исчезло.<br>2. Вы не можете написать или позвонить тому, кого нет в сети. Ваши сообщения получают только те, кто сейчас в сети. Если вы кому-то написали, потом вы и ваш собеседник вышли, то этих сообщений больше не существует. Таким образом, связь имеет сессионный характер - договорились с кем-то заранее, пообщались и вышли. Можно и не выходить и просто всегда быть в сети.<br>3. Вы можете не знать к кем именно вы общаетесь. Все, что требуется для входа это произвольный никнейм, поэтому ответственность в понимании личности собеседника лежит полностью на пользователе.<br>4. (в текущей версии) Общение в узком кругу. У вас нет списка личных контактов. Вы видите всех, кто сейчас в сети, поэтому один инстанс* приложения не рассчитан на массовое использование миллионами и даже тысячами пользователей. Также есть ограничения на то, сколько аудио конференций может быть одновременно поддержано сервером.<br>*Инстанс приложения - это его копия, которая работает на любом частном сервере и доступна по одному или нескольким веб-адресам или IP. Таким образом группу пользователей объединяет только знание этого адреса. Количество инстансов не ограниченно.<br>Разработчик приложения не несет ответственности за то каким образом оно используется и какие данные передаются через него. Код приложения может быть скопирован, и изменен кем угодно для своих нужд при условии сохранения ссылки на исходный репозиторий в разделе "О приложении". Полная версия лицензии на использование есть в GIT.',
+      repoLink: 'Исходный код',
     },
     theme: {
       label: 'Тема: {mode}',
@@ -545,7 +545,7 @@ export const messages = {
     },
     sidebar: {
       groupChat: 'Групповой чат',
-      noOneOnline: 'Сейчас никто не в сети.',
+      noOneOnline: 'В сети только вы.',
     },
     chat: {
       typeMessage: 'Введите сообщение...',
@@ -564,16 +564,16 @@ export const messages = {
       incomingFromLabel: 'Входящий звонок от',
       incomingFrom: 'Входящий звонок от {name}',
       unknown: 'Неизвестно',
-      waitingToJoinNamed: 'Ожидание присоединения к {name}…',
-      waitingToJoin: 'Ожидание присоединения…',
-      requestingToJoinNamed: 'Запрос на присоединение к {name}…',
-      requestingToJoin: 'Запрос на присоединение…',
-      calling: 'Звонок…',
-      callingNamed: 'Звонок {name}…',
+      waitingToJoinNamed: 'Ожидание подключения к {name}…',
+      waitingToJoin: 'Ожидание подключения…',
+      requestingToJoinNamed: 'Запрос на подключение к {name}…',
+      requestingToJoin: 'Запрос на подключение…',
+      calling: 'Звоним…',
+      callingNamed: 'Звоним {name}…',
       ringing: 'Гудки…',
       ringingNamed: 'Гудки у {name}…',
-      inviting: 'Приглашение…',
-      connecting: 'Подключение…',
+      inviting: 'Приглашаем…',
+      connecting: 'Подключаемся…',
       connected: 'Подключено',
       incomingCall: 'Входящий звонок',
       incomingCallNamed: 'Входящий звонок: {name}',
@@ -606,8 +606,8 @@ export const messages = {
       udpRelayPortsRatio: 'UDP relay-порты ~{used}/{total}',
       udpRelayPortsTotal: 'UDP relay-порты {total}',
       udpRelayPortsUsed: 'UDP relay-порты в использовании ~{used}',
-      estConfMax: 'оценка конф. макс ~{users} пользователей',
-      estCallsMax: 'оценка 1:1 макс ~{calls} звонков',
+      estConfMax: 'оценка: макс. ~{users} пользователей',
+      estCallsMax: 'оценка: макс. ~{calls} звонков 1:1',
     },
     confirm: {
       leave: 'Выйти и покинуть {appName}?',
@@ -626,6 +626,7 @@ export const i18n = createI18n({
   legacy: false,
   locale: detectInitialLocale(),
   fallbackLocale: 'en',
+  warnHtmlMessage: false,
   messages,
 })
 
