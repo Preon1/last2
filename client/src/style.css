@@ -476,7 +476,8 @@ button:disabled {
 
 /* Layout */
 .setup {
-  min-height: 100vh;
+  height: 100vh;
+  height: 100svh;
   display: grid;
   place-items: center;
 }
