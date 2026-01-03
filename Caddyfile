@@ -1,0 +1,20 @@
+{
+  # Optional (recommended): set ACME_EMAIL in your .env
+  email {$ACME_EMAIL}
+}
+
+# Public site (set LRCOM_DOMAIN in your .env)
+{$LRCOM_DOMAIN} {
+  # Request RSA 4096-bit certs from Let's Encrypt (instead of ECDSA).
+  tls {
+    key_type rsa4096
+  }
+
+  # Proxy everything (HTTP + WebSocket) to the app running HTTPS inside the network.
+  reverse_proxy https://lrcom:8443 {
+    transport http {
+      # The app uses an internal/self-signed cert by default.
+      tls_insecure_skip_verify
+    }
+  }
+}
