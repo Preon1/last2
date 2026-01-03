@@ -2,27 +2,32 @@
 import { computed } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useSessionStore } from '../stores/session'
-import { useCallStore } from '../stores/call'
 import { useUiStore } from '../stores/ui'
 
 const session = useSessionStore()
-const call = useCallStore()
 const ui = useUiStore()
 const { users } = storeToRefs(session)
 const { myId } = storeToRefs(session)
 const { sidebarOpen } = storeToRefs(ui)
+const { activeChatName } = storeToRefs(ui)
 
 const visibleUsers = computed(() => {
   const mine = myId.value
-  return mine ? users.value.filter((u) => u.id !== mine) : users.value
+  return (mine ? users.value.filter((u) => u.id !== mine) : users.value).filter((u) => Boolean(u.name))
 })
 
-function canCall(id: string, name: string | null, busy: boolean) {
-  if (!id) return false
-  if (!name) return false
-  if (busy) return false
-  if (myId.value && id === myId.value) return false
-  return true
+function onOpenGroup() {
+  ui.openChat(null)
+  ui.closeSidebar()
+}
+
+function onOpenUser(name: string) {
+  ui.openChat(name)
+  ui.closeSidebar()
+}
+
+function isActive(name: string | null) {
+  return (activeChatName.value ?? null) === name
 }
 </script>
 
@@ -30,21 +35,22 @@ function canCall(id: string, name: string | null, busy: boolean) {
   <aside class="sidebar" :class="{ open: sidebarOpen }">
     <div class="sidebar-title">Online</div>
     <ul class="users">
+      <li>
+        <button class="user-row" type="button" :class="{ active: isActive(null) }" @click="onOpenGroup">
+          <span class="name">Group chat</span>
+          <span v-if="ui.getUnread(null)" class="unread-badge" aria-label="Unread messages">{{ ui.getUnread(null) }}</span>
+        </button>
+      </li>
+
       <template v-if="visibleUsers.length">
         <li v-for="u in visibleUsers" :key="u.id">
-          <div class="name">{{ u.name || '…' }}</div>
-          <div class="user-actions">
-            <div class="meta">{{ u.busy ? 'busy' : '' }}</div>
-            <button
-              class="secondary icon-only"
-              type="button"
-              aria-label="Call"
-              :disabled="!canCall(u.id, u.name, u.busy)"
-              @click="call.startCall(u.id, u.name || ''); ui.closeSidebar()"
-            >
-              <svg class="icon" aria-hidden="true" focusable="false"><use xlink:href="/icons.svg#call"></use></svg>
-            </button>
-          </div>
+          <button class="user-row" type="button" :class="{ active: isActive(u.name!) }" @click="onOpenUser(u.name!)">
+            <span class="name">{{ u.name }}</span>
+            <span class="user-row-right">
+              <span class="meta">{{ u.busy ? 'busy' : '' }}</span>
+              <span v-if="ui.getUnread(u.name!)" class="unread-badge" aria-label="Unread messages">{{ ui.getUnread(u.name!) }}</span>
+            </span>
+          </button>
         </li>
       </template>
       <li v-else>

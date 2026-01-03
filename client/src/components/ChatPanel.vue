@@ -10,22 +10,47 @@ const session = useSessionStore()
 const ui = useUiStore()
 const call = useCallStore()
 
-const { chat } = storeToRefs(session)
-const { enabledKinds, replyToId } = storeToRefs(ui)
+const { chat, users } = storeToRefs(session)
+const { replyToId, activeChatName, activeChatLabel } = storeToRefs(ui)
 const { inCall, outgoingPending, pendingIncomingFrom } = storeToRefs(call)
 
 const showCallPanel = computed(() => Boolean(pendingIncomingFrom.value) || outgoingPending.value || inCall.value)
+
+const activePeer = computed(() => {
+  const name = activeChatName.value
+  if (!name) return null
+  return users.value.find((u) => u.name === name) ?? null
+})
+
+const canCallActivePeer = computed(() => {
+  const peer = activePeer.value
+  if (!peer) return false
+  if (!peer.id || !peer.name) return false
+  if (peer.busy) return false
+  // Don't allow starting a new call while any call state is active.
+  if (pendingIncomingFrom.value) return false
+  if (outgoingPending.value) return false
+  if (inCall.value) return false
+  return true
+})
+
+function onCallActivePeer() {
+  const peer = activePeer.value
+  if (!peer || !peer.id || !peer.name) return
+  void call.startCall(peer.id, peer.name)
+}
 
 const chatInput = ref('')
 const chatMessagesEl = ref<HTMLElement | null>(null)
 const chatInputEl = ref<HTMLTextAreaElement | null>(null)
 
 const filteredChat = computed(() => {
-  const kinds = enabledKinds.value
-  return chat.value.filter((m) => {
-    const kind = m.private ? 'private' : (m.fromName === 'System' ? 'system' : 'public')
-    return kinds.has(kind)
-  })
+  const peer = activeChatName.value
+  // Group chat view
+  if (!peer) return chat.value.filter((m) => !m.private)
+
+  // Private chat view with selected user
+  return chat.value.filter((m) => m.private && (m.fromName === peer || m.toName === peer))
 })
 
 function parseReply(text: string): { replyTo: string | null; body: string } {
@@ -149,16 +174,28 @@ function onClickReplyTarget(id: string) {
   <section class="chat">
     <CallPanel v-if="showCallPanel" />
 
+    <div class="chat-header">
+      <div class="chat-header-title">{{ activeChatLabel }}</div>
+      <button
+        v-if="activeChatName"
+        class="secondary icon-only"
+        type="button"
+        aria-label="Call"
+        :disabled="!canCallActivePeer"
+        @click="onCallActivePeer"
+      >
+        <svg class="icon" aria-hidden="true" focusable="false"><use xlink:href="/icons.svg#call"></use></svg>
+      </button>
+    </div>
+
     <div ref="chatMessagesEl" class="chat-messages" aria-live="polite">
       <div
         v-for="(m, i) in renderedChat"
         :key="m.id ?? i"
         class="chat-line"
-        :data-kind="m.private ? 'private' : (m.fromName === 'System' ? 'system' : 'public')"
         :data-msg-id="m.id || undefined"
       >
         <div class="chat-meta">
-          <span v-if="m.private" class="chat-badge chat-badge-private">private</span>
           <span>{{ m.fromName }}</span>
           <button v-if="m.id" class="reply-btn" type="button" @click="onClickReplyTarget(m.id)">Reply</button>
         </div>

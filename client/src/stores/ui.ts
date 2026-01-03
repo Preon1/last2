@@ -12,17 +12,41 @@ export const useUiStore = defineStore('ui', () => {
 
   const replyToId = ref<string | null>(null)
 
-  const showPrivate = ref(true)
-  const showPublic = ref(true)
-  const showSystem = ref(true)
+  // Chat selection: null means "Group chat", otherwise the peer's display name.
+  const activeChatName = ref<string | null>(null)
+  const unreadByChat = ref<Record<string, number>>({})
 
-  const enabledKinds = computed(() => {
-    const kinds = new Set<string>()
-    if (showPublic.value) kinds.add('public')
-    if (showPrivate.value) kinds.add('private')
-    if (showSystem.value) kinds.add('system')
-    return kinds
-  })
+  const activeChatLabel = computed(() => activeChatName.value ?? 'Group chat')
+
+  function chatKey(name: string | null) {
+    return name ? `u:${name}` : 'group'
+  }
+
+  function getUnread(name: string | null) {
+    return unreadByChat.value[chatKey(name)] ?? 0
+  }
+
+  function clearUnread(name: string | null) {
+    const key = chatKey(name)
+    if (!unreadByChat.value[key]) return
+    unreadByChat.value = { ...unreadByChat.value, [key]: 0 }
+  }
+
+  function bumpUnread(name: string | null) {
+    const key = chatKey(name)
+    const cur = unreadByChat.value[key] ?? 0
+    unreadByChat.value = { ...unreadByChat.value, [key]: cur + 1 }
+  }
+
+  function openChat(name: string | null) {
+    activeChatName.value = name
+    clearUnread(name)
+  }
+
+  function resetChats() {
+    activeChatName.value = null
+    unreadByChat.value = {}
+  }
 
   const themeLabel = computed(() => {
     const mode = themeMode.value
@@ -121,10 +145,13 @@ export const useUiStore = defineStore('ui', () => {
     themeLabel,
     cycleTheme,
     replyToId,
-    showPrivate,
-    showPublic,
-    showSystem,
-    enabledKinds,
+    activeChatName,
+    activeChatLabel,
+    openChat,
+    resetChats,
+    getUnread,
+    bumpUnread,
+    clearUnread,
     openSettings,
     closeSettings,
     toggleSettings,

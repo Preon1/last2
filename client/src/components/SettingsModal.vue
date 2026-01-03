@@ -8,7 +8,7 @@ import { confirmLeave } from '../utils/confirmLeave'
 const ui = useUiStore()
 const session = useSessionStore()
 
-const { settingsOpen, showPrivate, showPublic, showSystem, themeLabel } = storeToRefs(ui)
+const { settingsOpen, themeLabel } = storeToRefs(ui)
 const { status, techInfo, myName } = storeToRefs(session)
 
 function onBackdropClick(e: MouseEvent) {
@@ -48,12 +48,6 @@ watchEffect((onCleanup) => {
   >
     <div class="modal-card">
       <div class="modal-title" id="settingsTitle">Settings</div>
-
-      <div class="filter-list">
-        <label class="filter-item"><input v-model="showPrivate" type="checkbox" /> Private</label>
-        <label class="filter-item"><input v-model="showPublic" type="checkbox" /> Public</label>
-        <label class="filter-item"><input v-model="showSystem" type="checkbox" /> System</label>
-      </div>
 
       <div class="settings-tech">
         <div v-if="myName" class="status">You: <strong>{{ myName }}</strong></div>
