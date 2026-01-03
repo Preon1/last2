@@ -37,6 +37,86 @@ Then open:
 
 Only one port is used: `8443`.
 
+## Production install (Ubuntu 24 + rootless Docker + domain + Let's Encrypt RSA-4096)
+
+This repo includes a production reverse proxy setup using:
+
+- [docker-compose.prod.yml](docker-compose.prod.yml) (Caddy reverse proxy)
+- [Caddyfile](Caddyfile) (automatic Let's Encrypt TLS with RSA 4096)
+
+The app container still serves HTTPS internally on `8443`. Caddy terminates public HTTPS on `443` and proxies to the app.
+
+### 1) Prereqs
+
+- Clean Ubuntu 24 server
+- Docker installed in **rootless** mode for your deployment user
+- A domain name pointing to the server (DNS A/AAAA)
+
+### 2) Open required ports
+
+On your server/firewall/router/cloud rules, allow:
+
+- `80/tcp` (Let's Encrypt HTTP-01 + redirect)
+- `443/tcp` (HTTPS)
+- `3478/tcp` and `3478/udp` (TURN)
+- `49160-49200/udp` (TURN relay range; configurable)
+
+### 3) Rootless Docker: allow binding to 80/443 (persistent)
+
+Rootless Docker uses RootlessKit for port forwarding. To publish ports `80`/`443`, set `net.ipv4.ip_unprivileged_port_start=80`.
+
+Create a sysctl drop-in (persistent across reboots):
+
+```bash
+sudo tee /etc/sysctl.d/99-rootless-ports.conf >/dev/null <<'EOF'
+net.ipv4.ip_unprivileged_port_start=80
+EOF
+sudo sysctl --system
+```
+
+Verify:
+
+```bash
+sysctl net.ipv4.ip_unprivileged_port_start
+```
+
+Restart rootless Docker (so RootlessKit picks it up):
+
+```bash
+systemctl --user restart docker
+```
+
+### 4) Configure `.env`
+
+Copy `.env.example` to `.env` and set at least:
+
+- `LRCOM_DOMAIN=your.domain.com` (required for Caddy)
+- `ACME_EMAIL=you@your.domain.com` (recommended for Let's Encrypt)
+
+TURN must be reachable by browsers:
+
+- `LRCOM_TURN_HOST=your.domain.com` (or your public IP)
+- `LRCOM_TURN_SECRET=...` (long random string)
+- `LRCOM_TURN_EXTERNAL_IP=your.public.ip`
+
+### 5) Start
+
+Run the production stack (base compose + prod override):
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+```
+
+Open:
+
+- `https://your.domain.com`
+
+### Notes
+
+- Certificates auto-renew via Caddy.
+- TLS key type is configured as **RSA 4096** in [Caddyfile](Caddyfile).
+- The app is proxied over internal HTTPS; Caddy is configured to skip TLS verification for that internal hop because the app uses a self-signed cert by default.
+
 ## HTTPS (default)
 
 By default, the container generates a **self-signed** certificate (personal/private use). Your browser will show a warning unless you add the cert to your trust store.
