@@ -261,7 +261,6 @@ function onClickReplyTarget(id: string) {
         :placeholder="String(t('chat.typeMessage'))"
         @keydown="onChatKeydown"
         @input="autoGrowChatInput"
-        @focus="autoGrowChatInput"
       ></textarea>
       <button class="icon-only" type="button" :aria-label="String(t('chat.sendAria'))" @click="onSend">
         <svg class="icon" aria-hidden="true" focusable="false"><use xlink:href="/icons.svg#send"></use></svg>

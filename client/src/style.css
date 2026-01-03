@@ -700,8 +700,10 @@ button:disabled {
   margin-top: 12px;
 }
 
-textarea {
-  min-height: 42px;
+.chat-input textarea {
+  padding: 8px 12px;
+  line-height: 1.25;
+  min-height: 38px;
 }
 
 .modal {
