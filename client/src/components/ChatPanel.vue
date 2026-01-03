@@ -3,13 +3,18 @@ import { computed, ref, watchEffect } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useSessionStore } from '../stores/session'
 import { useUiStore } from '../stores/ui'
+import { useCallStore } from '../stores/call'
 import CallPanel from './CallPanel.vue'
 
 const session = useSessionStore()
 const ui = useUiStore()
+const call = useCallStore()
 
 const { chat } = storeToRefs(session)
-const { enabledKinds, filtersOpen, replyToId, showPrivate, showPublic, showSystem } = storeToRefs(ui)
+const { enabledKinds, replyToId } = storeToRefs(ui)
+const { inCall, outgoingPending, pendingIncomingFrom } = storeToRefs(call)
+
+const showCallPanel = computed(() => Boolean(pendingIncomingFrom.value) || outgoingPending.value || inCall.value)
 
 const chatInput = ref('')
 const chatMessagesEl = ref<HTMLElement | null>(null)
@@ -116,10 +121,6 @@ watchEffect(() => {
   })
 })
 
-function onBackdropClick(e: MouseEvent) {
-  if (e.target && e.target === e.currentTarget) ui.closeFilters()
-}
-
 function cssEscape(s: string) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const css = (window as any).CSS
@@ -142,20 +143,11 @@ function onClickReplyTarget(id: string) {
   queueMicrotask(() => chatInputEl.value?.focus())
 }
 
-function onEscape(e: KeyboardEvent) {
-  if (e.key === 'Escape') ui.closeFilters()
-}
-
-watchEffect((onCleanup) => {
-  if (!filtersOpen.value) return
-  document.addEventListener('keydown', onEscape)
-  onCleanup(() => document.removeEventListener('keydown', onEscape))
-})
 </script>
 
 <template>
   <section class="chat">
-    <CallPanel />
+    <CallPanel v-if="showCallPanel" />
 
     <div ref="chatMessagesEl" class="chat-messages" aria-live="polite">
       <div
@@ -212,19 +204,5 @@ watchEffect((onCleanup) => {
       </button>
     </div>
 
-    <div v-if="filtersOpen" class="modal" role="dialog" aria-modal="true" aria-labelledby="filterTitle" @click="onBackdropClick">
-      <div class="modal-card">
-        <div class="modal-title" id="filterTitle">Chat filters</div>
-        <div class="filter-list">
-          <label class="filter-item"><input v-model="showPrivate" type="checkbox" /> Private</label>
-          <label class="filter-item"><input v-model="showPublic" type="checkbox" /> Public</label>
-          <label class="filter-item"><input v-model="showSystem" type="checkbox" /> System</label>
-        </div>
-        <div class="modal-actions">
-          <div></div>
-          <button class="secondary" type="button" @click="ui.closeFilters">Close</button>
-        </div>
-      </div>
-    </div>
   </section>
 </template>

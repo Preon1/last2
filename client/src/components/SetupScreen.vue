@@ -28,13 +28,6 @@ function onJoin() {
             <div class="setup-subtitle muted">No accounts, no cookies, no saved sessions.</div>
           </div>
         </div>
-
-        <div class="setup-header-actions">
-          <button class="secondary" type="button" aria-label="Toggle theme" @click="ui.cycleTheme">
-            {{ themeLabel }}
-          </button>
-          <button class="secondary" type="button" aria-label="About" @click="ui.openAbout">About</button>
-        </div>
       </div>
 
       <form class="setup-form" autocomplete="off" @submit.prevent="onJoin">
@@ -46,7 +39,13 @@ function onJoin() {
         <button class="join" type="submit">Join</button>
 
         <div class="status" aria-live="polite">{{ status }}</div>
-        <div class="hint">Press Enter to join. Microphone permission will be requested after you join.</div>
+
+        <div class="setup-header-actions">
+          <button class="secondary" type="button" aria-label="Toggle theme" @click="ui.cycleTheme">
+            {{ themeLabel }}
+          </button>
+          <button class="secondary" type="button" aria-label="About" @click="ui.openAbout">About</button>
+        </div>
       </form>
     </div>
   </section>

@@ -8,24 +8,21 @@ export const useNotificationsStore = defineStore('notifications', () => {
 
   const supported = computed(() => typeof Notification !== 'undefined')
   const permission = ref<NotificationPermission>(typeof Notification === 'undefined' ? 'default' : Notification.permission)
-
-  const buttonLabel = computed(() => {
-    if (!supported.value) return 'Notifications unavailable'
-    if (permission.value === 'granted') return 'Notifications on'
-    if (permission.value === 'denied') return 'Notifications blocked'
-    return 'Enable notifications'
-  })
-
-  const buttonDisabled = computed(() => !supported.value || permission.value === 'denied' || session.ws == null)
+  const didAutoRequestThisSession = ref(false)
 
   async function requestPermissionAndEnable() {
-    if (!supported.value) return
-    const perm = await Notification.requestPermission()
-    permission.value = perm
-    if (perm !== 'granted') return
+    if (!supported.value) return false
 
-    // Optional/best-effort.
-    await tryEnableWebPushForSocket(session.send)
+    try {
+      const perm = await Notification.requestPermission()
+      permission.value = perm
+      if (perm !== 'granted') return false
+
+      // Optional/best-effort.
+      return await tryEnableWebPushForSocket(session.send)
+    } catch {
+      return false
+    }
   }
 
   // Keep permission in sync if browser changes it.
@@ -34,12 +31,39 @@ export const useNotificationsStore = defineStore('notifications', () => {
     permission.value = Notification.permission
   }
 
+  async function autoRequestAfterLogin() {
+    if (didAutoRequestThisSession.value) return
+    didAutoRequestThisSession.value = true
+
+    if (!supported.value) return
+    refresh()
+    if (permission.value === 'denied') return
+
+    // Avoid doing anything until the socket is actually usable.
+    if (!session.connected) return
+
+    // If already granted, just try enabling push silently.
+    if (permission.value === 'granted') {
+      await tryEnableWebPushForSocket(session.send)
+      return
+    }
+
+    // Best-effort: browsers may block this without a user gesture.
+    if (permission.value === 'default') {
+      await requestPermissionAndEnable()
+    }
+  }
+
+  session.registerDisconnectHandler(() => {
+    didAutoRequestThisSession.value = false
+    refresh()
+  })
+
   return {
     supported,
     permission,
-    buttonLabel,
-    buttonDisabled,
     requestPermissionAndEnable,
+    autoRequestAfterLogin,
     refresh,
   }
 })

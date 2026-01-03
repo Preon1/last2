@@ -2,7 +2,7 @@ import { defineStore } from 'pinia'
 import { computed, ref, watch } from 'vue'
 
 export const useUiStore = defineStore('ui', () => {
-  const filtersOpen = ref(false)
+  const settingsOpen = ref(false)
 
   const aboutOpen = ref(false)
 
@@ -58,16 +58,16 @@ export const useUiStore = defineStore('ui', () => {
     themeMode.value = themeMode.value === 'system' ? 'dark' : themeMode.value === 'dark' ? 'light' : 'system'
   }
 
-  function openFilters() {
-    filtersOpen.value = true
+  function openSettings() {
+    settingsOpen.value = true
   }
 
-  function closeFilters() {
-    filtersOpen.value = false
+  function closeSettings() {
+    settingsOpen.value = false
   }
 
-  function toggleFilters() {
-    filtersOpen.value = !filtersOpen.value
+  function toggleSettings() {
+    settingsOpen.value = !settingsOpen.value
   }
 
   function openAbout() {
@@ -114,7 +114,7 @@ export const useUiStore = defineStore('ui', () => {
   )
 
   return {
-    filtersOpen,
+    settingsOpen,
     aboutOpen,
     sidebarOpen,
     themeMode,
@@ -125,9 +125,9 @@ export const useUiStore = defineStore('ui', () => {
     showPublic,
     showSystem,
     enabledKinds,
-    openFilters,
-    closeFilters,
-    toggleFilters,
+    openSettings,
+    closeSettings,
+    toggleSettings,
     openAbout,
     closeAbout,
     openSidebar,

@@ -107,17 +107,6 @@ body {
     radial-gradient(820px 520px at 22% 92%, var(--spot-3), transparent 58%),
     radial-gradient(720px 460px at 86% 86%, var(--spot-4), transparent 60%);
   background-attachment: fixed;
-
-  height: 100vh;
-  height: 100dvh;
-  min-height: 100vh;
-  min-height: 100dvh;
-  max-height: 100vh;
-  max-height: 100dvh;
-}
-
-main {
-  height: 100%;
 }
 
 .logo {
@@ -457,8 +446,7 @@ button:disabled {
 }
 
 .setup-card {
-  width: 100%;
-  max-width: 560px;
+  width: min(80vw, 560px);
   background: var(--card-bg);
   border: 1px solid var(--border);
   border-radius: 12px;
@@ -467,14 +455,15 @@ button:disabled {
 
 .app {
   height: 100vh;
+  height: 100dvh;
+  width: 100vw;
   display: flex;
   flex-direction: column;
 }
 
 .header {
-  width: 100%;
   display: grid;
-  grid-template-columns: 1fr 2fr 1fr;
+  grid-template-columns: 1fr 1fr;
   gap: 12px;
   align-items: center;
   padding: 10px 12px;
@@ -536,13 +525,14 @@ button:disabled {
 }
 
 .sidebar {
-  width: 320px;
   background: var(--card-bg);
-  border-right: 1px solid var(--border);
   padding: 12px;
   display: flex;
   flex-direction: column;
-  min-height: 0;
+  width: min(320px, 85vw);
+  height: calc( 100vh - 87px );
+  height: calc( 100dvh - 87px );
+  border-right: 1px solid var(--border);
 }
 
 .overlay {
@@ -558,7 +548,7 @@ button:disabled {
 
 @media (max-width: 900px) {
   .header {
-    grid-template-columns: 1fr 0fr 1fr;
+    grid-template-columns: 1fr 1fr;
   }
 
   .mobile-only {
@@ -567,14 +557,13 @@ button:disabled {
 
   .sidebar {
     position: fixed;
-    top: 0;
     bottom: 0;
     left: 0;
-    width: min(340px, 86vw);
     z-index: 60;
+    border-radius: 0 12px 0 0;
+    border-right: none;
     transform: translateX(-110%);
     transition: transform 180ms ease;
-    border-right: 1px solid var(--border);
   }
 
   .sidebar.open {
@@ -586,46 +575,20 @@ button:disabled {
   }
 }
 
-@media (max-width: 640px) {
-  /* Match legacy: account controls move into the Users sidebar on mobile. */
-  .header .account-controls {
-    display: none;
-  }
 
-  .sidebar-controls .account-controls {
-    display: flex;
-    flex-direction: column;
-    align-items: stretch;
-    gap: 10px;
-  }
-
-  .sidebar-controls .who {
-    justify-content: space-between;
-  }
+.settings-tech {
+  margin-top: 12px;
 }
 
-.sidebar-footer {
+.settings-actions {
   margin-top: 12px;
-  padding-top: 10px;
-  border-top: 1px solid var(--border);
   display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.sidebar-controls {
-  margin-top: 12px;
-  padding-top: 10px;
-  border-top: 1px solid var(--border);
-}
-
-.sidebar-controls .account-controls {
-  display: none;
+  flex-wrap: wrap;
+  gap: 10px;
 }
 
 .sidebar-title {
   font-weight: 800;
-  margin-bottom: 10px;
 }
 
 .chat {
