@@ -1,11 +1,6 @@
-{
-  # Note: Caddy requires an email value here. If you leave ACME_EMAIL empty,
-  # the Caddyfile fails to parse. It's safe to omit this entirely; Caddy will
-  # still obtain/renew Let's Encrypt certificates.
-}
-
-# Public site (set LRCOM_DOMAIN in your .env)
-{$LRCOM_DOMAIN} {
+# Public site (set LRCOM_DOMAIN in your .env). The default keeps the file
+# parseable if the env var is missing.
+{$LRCOM_DOMAIN:localhost} {
   # Request RSA 4096-bit certs from Let's Encrypt (instead of ECDSA).
   tls {
     key_type rsa4096
