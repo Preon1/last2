@@ -53,7 +53,7 @@ export const messages = {
       logout: 'Logout',
     },
     setup: {
-      subtitle: 'No accounts, no cookies, no saved sessions.',
+      subtitle: 'Anonymous, encrypted voice web messenger with no registration and no chat history.',
       yourName: 'Your name',
       namePlaceholder: 'e.g. Alex',
       join: 'Join',
@@ -170,7 +170,7 @@ export const messages = {
       logout: 'Uitloggen',
     },
     setup: {
-      subtitle: 'Geen accounts, geen cookies, geen opgeslagen sessies.',
+      subtitle: 'Anonieme, versleutelde spraak-webmessenger zonder registratie en zonder chatgeschiedenis.',
       yourName: 'Jouw naam',
       namePlaceholder: 'bijv. Alex',
       join: 'Meedoen',
@@ -287,7 +287,7 @@ export const messages = {
       logout: 'Déconnexion',
     },
     setup: {
-      subtitle: 'Pas de comptes, pas de cookies, pas de sessions enregistrées.',
+      subtitle: 'Messagerie vocale web anonyme et chiffrée, sans inscription ni historique de conversation.',
       yourName: 'Votre nom',
       namePlaceholder: 'ex. Alex',
       join: 'Rejoindre',
@@ -404,7 +404,7 @@ export const messages = {
       logout: 'Abmelden',
     },
     setup: {
-      subtitle: 'Keine Konten, keine Cookies, keine gespeicherten Sitzungen.',
+      subtitle: 'Anonymer, verschlüsselter Voice-Web-Messenger ohne Registrierung und ohne Chatverlauf.',
       yourName: 'Dein Name',
       namePlaceholder: 'z. B. Alex',
       join: 'Beitreten',
@@ -521,7 +521,7 @@ export const messages = {
       logout: 'Выйти',
     },
     setup: {
-      subtitle: 'Без аккаунтов, без cookie, без сохранённых сессий.',
+      subtitle: 'Анонимный зашифрованный голосовой веб мессенджер без регистрации и хранения истории переписки',
       yourName: 'Ваше имя',
       namePlaceholder: 'напр. Алекс',
       join: 'Присоединиться',
