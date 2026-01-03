@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
 import { useUiStore } from './ui'
+import { i18n } from '../i18n'
 
 export type PresenceUser = {
   id: string
@@ -87,24 +88,34 @@ export const useSessionStore = defineStore('session', () => {
   const chat = ref<ChatMsg[]>([])
 
   const techInfo = computed(() => {
+    // Ensure this recomputes when locale changes.
+    void i18n.global.locale.value
+
     const voice = voiceInfo.value
     if (!voice || (!voice.turnHost && voice.relayPortsTotal == null)) return ''
 
     const parts: string[] = []
-    if (voice.turnHost) parts.push(`TURN ${voice.turnHost}`)
+    if (voice.turnHost) parts.push(String(i18n.global.t('session.turn', { host: voice.turnHost })))
 
     if (typeof voice.relayPortsUsedEstimate === 'number' && typeof voice.relayPortsTotal === 'number') {
-      parts.push(`UDP relay ports ~${voice.relayPortsUsedEstimate}/${voice.relayPortsTotal}`)
+      parts.push(
+        String(
+          i18n.global.t('session.udpRelayPortsRatio', {
+            used: voice.relayPortsUsedEstimate,
+            total: voice.relayPortsTotal,
+          }),
+        ),
+      )
     } else if (typeof voice.relayPortsTotal === 'number') {
-      parts.push(`UDP relay ports ${voice.relayPortsTotal}`)
+      parts.push(String(i18n.global.t('session.udpRelayPortsTotal', { total: voice.relayPortsTotal })))
     } else if (typeof voice.relayPortsUsedEstimate === 'number') {
-      parts.push(`UDP relay ports in use ~${voice.relayPortsUsedEstimate}`)
+      parts.push(String(i18n.global.t('session.udpRelayPortsUsed', { used: voice.relayPortsUsedEstimate })))
     }
 
     if (typeof voice.maxConferenceUsersEstimate === 'number') {
-      parts.push(`est conf max ~${voice.maxConferenceUsersEstimate} users`)
+      parts.push(String(i18n.global.t('session.estConfMax', { users: voice.maxConferenceUsersEstimate })))
     } else if (typeof voice.capacityCallsEstimate === 'number') {
-      parts.push(`est 1:1 max ~${voice.capacityCallsEstimate} calls`)
+      parts.push(String(i18n.global.t('session.estCallsMax', { calls: voice.capacityCallsEstimate })))
     }
 
     return parts.join(' • ')
@@ -155,11 +166,11 @@ export const useSessionStore = defineStore('session', () => {
   function connect(name: string) {
     const desiredName = name.trim()
     if (!desiredName) {
-      status.value = 'Enter a name.'
+      status.value = String(i18n.global.t('session.enterName'))
       return
     }
 
-    status.value = 'Connecting…'
+    status.value = String(i18n.global.t('session.connecting'))
     disconnect()
 
     const sock = new WebSocket(wsUrl())
@@ -200,7 +211,10 @@ export const useSessionStore = defineStore('session', () => {
           myName.value = name
           status.value = ''
         } else {
-          status.value = reason === 'taken' ? 'Name is taken.' : 'Invalid name.'
+          status.value =
+            reason === 'taken'
+              ? String(i18n.global.t('session.nameTaken'))
+              : String(i18n.global.t('session.invalidName'))
         }
         return
       }
@@ -260,7 +274,7 @@ export const useSessionStore = defineStore('session', () => {
 
       if (type === 'error') {
         const code = asString(obj.code)
-        if (code === 'NO_NAME') status.value = 'Enter a name.'
+        if (code === 'NO_NAME') status.value = String(i18n.global.t('session.enterName'))
       }
 
       for (const h of inboundHandlers) {
@@ -273,12 +287,12 @@ export const useSessionStore = defineStore('session', () => {
     })
 
     sock.addEventListener('close', () => {
-      if (myName.value) status.value = 'Disconnected.'
+      if (myName.value) status.value = String(i18n.global.t('session.disconnected'))
       // keep state; user can reconnect
     })
 
     sock.addEventListener('error', () => {
-      status.value = 'Connection error.'
+      status.value = String(i18n.global.t('session.connectionError'))
     })
   }
 

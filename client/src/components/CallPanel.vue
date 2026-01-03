@@ -2,8 +2,10 @@
 import { computed } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useCallStore } from '../stores/call'
+import { useI18n } from 'vue-i18n'
 
 const call = useCallStore()
+const { t } = useI18n()
 const {
   status,
   timerText,
@@ -41,13 +43,13 @@ function onRejectJoin() {
       <div class="call-meta">
         <div class="status">
           <template v-if="pendingIncomingFrom">
-            Incoming call from <strong>{{ pendingIncomingFromName || 'Unknown' }}</strong>
+            {{ t('call.incomingFromLabel') }} <strong>{{ pendingIncomingFromName || t('call.unknown') }}</strong>
           </template>
           <template v-else-if="joinPending">
-            {{ joinPendingToName ? `Waiting to join ${joinPendingToName}…` : 'Waiting to join…' }}
+            {{ joinPendingToName ? t('call.waitingToJoinNamed', { name: joinPendingToName }) : t('call.waitingToJoin') }}
           </template>
           <template v-else>
-            {{ status || (outgoingPending ? 'Calling…' : '') }}
+            {{ status || (outgoingPending ? t('call.calling') : '') }}
           </template>
         </div>
         <div class="muted call-timer" :class="{ hidden: timerText === '00:00' }">{{ timerText }}</div>
@@ -55,23 +57,23 @@ function onRejectJoin() {
 
       <div class="call-actions">
         <template v-if="pendingIncomingFrom">
-          <button type="button" @click="onAccept">Accept</button>
-          <button class="secondary" type="button" @click="call.rejectIncoming">Reject</button>
+          <button type="button" @click="onAccept">{{ t('call.accept') }}</button>
+          <button class="secondary" type="button" @click="call.rejectIncoming">{{ t('call.reject') }}</button>
         </template>
         <template v-else-if="joinPending">
-          <button class="secondary" type="button" @click="call.cancelJoinPending">Cancel request</button>
+          <button class="secondary" type="button" @click="call.cancelJoinPending">{{ t('call.cancelRequest') }}</button>
         </template>
         <template v-else-if="joinRequestFromId">
-          <button type="button" @click="onAcceptJoin">Add to call</button>
-          <button class="secondary" type="button" @click="onRejectJoin">Reject</button>
+          <button type="button" @click="onAcceptJoin">{{ t('call.addToCall') }}</button>
+          <button class="secondary" type="button" @click="onRejectJoin">{{ t('call.reject') }}</button>
         </template>
         <template v-else>
-          <button v-if="call.inCall || outgoingPending" class="danger" type="button" @click="call.hangup">Hang up</button>
+          <button v-if="call.inCall || outgoingPending" class="danger" type="button" @click="call.hangup">{{ t('call.hangUp') }}</button>
         </template>
       </div>
 
       <div v-if="joinRequestFromId" class="muted">
-        {{ joinRequestFromName ? `${joinRequestFromName} wants to join this call.` : 'Someone wants to join this call.' }}
+        {{ joinRequestFromName ? t('call.joinRequestNamed', { name: joinRequestFromName }) : t('call.joinRequestSomeone') }}
       </div>
 
       <div class="remote-audios">

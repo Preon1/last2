@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
 import { useSessionStore } from './session'
 import { notify, vibrate } from '../utils/notify'
+import { i18n } from '../i18n'
 
 type TurnConfig = {
   iceServers?: Array<{ urls: string | string[]; username?: string; credential?: string }>
@@ -31,10 +32,10 @@ function formatDuration(ms: number) {
 
 function micErrorToStatus(err: unknown) {
   const name = (asObj(err)?.name as string | undefined) ?? ''
-  if (name === 'NotAllowedError' || name === 'SecurityError') return 'Microphone permission denied.'
-  if (name === 'NotFoundError') return 'No microphone found.'
-  if (name === 'NotReadableError') return 'Microphone is in use.'
-  return 'Microphone error.'
+  if (name === 'NotAllowedError' || name === 'SecurityError') return String(i18n.global.t('call.micPermissionDenied'))
+  if (name === 'NotFoundError') return String(i18n.global.t('call.micNotFound'))
+  if (name === 'NotReadableError') return String(i18n.global.t('call.micInUse'))
+  return String(i18n.global.t('call.micError'))
 }
 
 export const useCallStore = defineStore('call', () => {
@@ -84,9 +85,11 @@ export const useCallStore = defineStore('call', () => {
   const peers = computed(() => Array.from(peerNames.entries()).map(([id, name]) => ({ id, name })))
 
   const callLabel = computed(() => {
+    // Ensure this recomputes when locale changes.
+    void i18n.global.locale.value
     const names = peers.value.map((p) => p.name).filter(Boolean)
-    if (names.length === 0) return 'Not in call'
-    return `In call: ${names.join(', ')}`
+    if (names.length === 0) return String(i18n.global.t('call.notInCall'))
+    return String(i18n.global.t('call.inCall', { names: names.join(', ') }))
   })
 
   function updateTimer() {
@@ -235,7 +238,9 @@ export const useCallStore = defineStore('call', () => {
 
     joinPending.value = true
     joinPendingToName.value = toName
-    status.value = toName ? `Requesting to join ${toName}…` : 'Requesting to join…'
+    status.value = toName
+      ? String(i18n.global.t('call.requestingToJoinNamed', { name: toName }))
+      : String(i18n.global.t('call.requestingToJoin'))
     session.send({ type: 'callJoinRequest', to: toId })
   }
 
@@ -298,7 +303,8 @@ export const useCallStore = defineStore('call', () => {
       if (!pcs.has(peerId)) return
       if (pc.connectionState === 'connected') {
         startTimerIfNeeded()
-        if (status.value !== 'Connected') status.value = 'Connected'
+        const connectedLabel = String(i18n.global.t('call.connected'))
+        if (status.value !== connectedLabel) status.value = connectedLabel
       }
       if (pc.connectionState === 'failed' || pc.connectionState === 'closed') {
         closePeer(peerId)
@@ -322,9 +328,11 @@ export const useCallStore = defineStore('call', () => {
     if (!roomId.value) {
       outgoingPending.value = true
       outgoingPendingName.value = toName
-      status.value = toName ? `Calling ${toName}…` : 'Calling…'
+      status.value = toName
+        ? String(i18n.global.t('call.callingNamed', { name: toName }))
+        : String(i18n.global.t('call.calling'))
     } else {
-      status.value = 'Inviting…'
+      status.value = String(i18n.global.t('call.inviting'))
     }
 
     session.send({ type: 'callStart', to: toId })
@@ -332,7 +340,7 @@ export const useCallStore = defineStore('call', () => {
 
   function hangup() {
     session.send({ type: 'callHangup' })
-    status.value = 'Call ended.'
+    status.value = String(i18n.global.t('call.callEnded'))
     stopRingtone()
     resetCallState()
   }
@@ -348,7 +356,7 @@ export const useCallStore = defineStore('call', () => {
     }
 
     stopRingtone()
-    status.value = 'Connecting…'
+    status.value = String(i18n.global.t('call.connecting'))
     session.send({
       type: 'callAccept',
       from: pendingIncomingFrom.value,
@@ -382,12 +390,18 @@ export const useCallStore = defineStore('call', () => {
       pendingIncomingFromName.value = asString(obj.fromName) ?? ''
       pendingIncomingRoomId.value = asString(obj.roomId)
       status.value = pendingIncomingFromName.value
-        ? `Incoming call: ${pendingIncomingFromName.value}`
-        : 'Incoming call'
+        ? String(i18n.global.t('call.incomingCallNamed', { name: pendingIncomingFromName.value }))
+        : String(i18n.global.t('call.incomingCall'))
 
       // Best-effort alerts (no permission prompts here).
       startRingtone()
-      notify('Incoming call', pendingIncomingFromName.value ? `From ${pendingIncomingFromName.value}` : 'Incoming call', { tag: 'lrcom-call' })
+      notify(
+        String(i18n.global.t('call.incomingCall')),
+        pendingIncomingFromName.value
+          ? String(i18n.global.t('call.from', { name: pendingIncomingFromName.value }))
+          : String(i18n.global.t('call.incomingCall')),
+        { tag: 'lrcom-call' },
+      )
       vibrate([200, 100, 200, 100, 400])
       return
     }
@@ -399,11 +413,13 @@ export const useCallStore = defineStore('call', () => {
         if (outgoingPending.value && !roomId.value) {
           outgoingPending.value = false
           outgoingPendingName.value = ''
-          status.value = `Call failed: ${reason}`
+          status.value = String(i18n.global.t('call.callFailed', { reason }))
         }
       } else {
         if (outgoingPending.value && !roomId.value) {
-          status.value = outgoingPendingName.value ? `Ringing ${outgoingPendingName.value}…` : 'Ringing…'
+          status.value = outgoingPendingName.value
+            ? String(i18n.global.t('call.ringingNamed', { name: outgoingPendingName.value }))
+            : String(i18n.global.t('call.ringing'))
         }
       }
       return
@@ -413,7 +429,9 @@ export const useCallStore = defineStore('call', () => {
       joinPending.value = true
       joinPendingRoomId.value = asString(obj.roomId)
       joinPendingToName.value = asString(obj.toName) ?? joinPendingToName.value
-      status.value = joinPendingToName.value ? `Waiting to join ${joinPendingToName.value}…` : 'Waiting to join…'
+      status.value = joinPendingToName.value
+        ? String(i18n.global.t('call.waitingToJoinNamed', { name: joinPendingToName.value }))
+        : String(i18n.global.t('call.waitingToJoin'))
       return
     }
 
@@ -421,7 +439,9 @@ export const useCallStore = defineStore('call', () => {
       const ok = asBool(obj.ok)
       const reason = asString(obj.reason) ?? ''
       if (!ok) {
-        status.value = reason ? `Join failed: ${reason}` : 'Join failed.'
+        status.value = reason
+          ? String(i18n.global.t('call.joinFailedReason', { reason }))
+          : String(i18n.global.t('call.joinFailed'))
         resetCallState()
       }
       return
@@ -438,14 +458,14 @@ export const useCallStore = defineStore('call', () => {
       if (outgoingPending.value && !roomId.value) {
         outgoingPending.value = false
         outgoingPendingName.value = ''
-        status.value = 'Call rejected.'
+        status.value = String(i18n.global.t('call.callRejected'))
       }
       if (!roomId.value) resetCallState()
       return
     }
 
     if (type === 'callEnded') {
-      status.value = 'Call ended.'
+      status.value = String(i18n.global.t('call.callEnded'))
       resetCallState()
       return
     }
@@ -477,7 +497,7 @@ export const useCallStore = defineStore('call', () => {
         return
       }
 
-      status.value = 'Connecting…'
+      status.value = String(i18n.global.t('call.connecting'))
       return
     }
 
@@ -498,7 +518,7 @@ export const useCallStore = defineStore('call', () => {
         return
       }
 
-      status.value = 'Connecting…'
+      status.value = String(i18n.global.t('call.connecting'))
       const offer = await pc.createOffer({ offerToReceiveAudio: true, offerToReceiveVideo: false })
       await pc.setLocalDescription(offer)
       session.send({ type: 'signal', to: peerId, payload: { kind: 'offer', sdp: offer } })
@@ -542,7 +562,7 @@ export const useCallStore = defineStore('call', () => {
         if (!pc) return
         const sdp = payloadObj.sdp as RTCSessionDescriptionInit
         await pc.setRemoteDescription(sdp)
-        status.value = 'Connected'
+        status.value = String(i18n.global.t('call.connected'))
         return
       }
 

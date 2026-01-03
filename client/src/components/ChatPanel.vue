@@ -5,10 +5,13 @@ import { useSessionStore } from '../stores/session'
 import { useUiStore } from '../stores/ui'
 import { useCallStore } from '../stores/call'
 import CallPanel from './CallPanel.vue'
+import { useI18n } from 'vue-i18n'
 
 const session = useSessionStore()
 const ui = useUiStore()
 const call = useCallStore()
+
+const { t } = useI18n()
 
 const { chat, users } = storeToRefs(session)
 const { replyToId, activeChatName, activeChatLabel } = storeToRefs(ui)
@@ -88,10 +91,10 @@ const renderedChat = computed(() => {
 const replyBanner = computed(() => {
   if (!replyToId.value) return null
   const found = byId.value.get(replyToId.value)
-  if (!found) return { title: 'Replying', subtitle: '' }
+  if (!found) return { title: String(t('chat.replying')), subtitle: '' }
   const body = parseReply(found.text).body
   const snip = body.length > 80 ? `${body.slice(0, 80)}…` : body
-  return { title: `Replying to ${found.fromName}`, subtitle: snip }
+  return { title: String(t('chat.replyingTo', { name: found.fromName })), subtitle: snip }
 })
 
 function onSend() {
@@ -184,7 +187,7 @@ function onClickReplyTarget(id: string) {
         v-if="activeChatName"
         class="secondary icon-only"
         type="button"
-        aria-label="Call"
+        :aria-label="String(t('chat.callAria'))"
         :disabled="!canCallActivePeer"
         @click="onCallActivePeer"
       >
@@ -201,13 +204,13 @@ function onClickReplyTarget(id: string) {
       @click="(e) => { if (e.target === e.currentTarget) call.cancelJoinConfirm() }"
     >
       <div class="modal-card">
-        <div class="modal-title" id="joinConfirmTitle">Join ongoing call?</div>
+        <div class="modal-title" id="joinConfirmTitle">{{ t('chat.joinOngoingTitle') }}</div>
         <div class="muted" style="margin-bottom: 12px;">
-          {{ joinConfirmToName ? `You are attempting to join ${joinConfirmToName}'s ongoing call.` : 'You are attempting to join an ongoing call.' }}
+          {{ joinConfirmToName ? t('chat.joinOngoingBodyNamed', { name: joinConfirmToName }) : t('chat.joinOngoingBody') }}
         </div>
         <div class="modal-actions">
-          <button class="secondary" type="button" @click="call.cancelJoinConfirm">Cancel</button>
-          <button type="button" @click="call.confirmJoinAttempt">Proceed</button>
+          <button class="secondary" type="button" @click="call.cancelJoinConfirm">{{ t('common.cancel') }}</button>
+          <button type="button" @click="call.confirmJoinAttempt">{{ t('common.proceed') }}</button>
         </div>
       </div>
     </div>
@@ -221,7 +224,7 @@ function onClickReplyTarget(id: string) {
       >
         <div class="chat-meta">
           <span>{{ m.fromName }}</span>
-          <button v-if="m.id" class="reply-btn" type="button" @click="onClickReplyTarget(m.id)">Reply</button>
+          <button v-if="m.id" class="reply-btn" type="button" @click="onClickReplyTarget(m.id)">{{ t('common.reply') }}</button>
         </div>
         <button
           v-if="m.replyTo"
@@ -230,10 +233,10 @@ function onClickReplyTarget(id: string) {
           @click="scrollToMessage(m.replyTo)"
         >
           <template v-if="byId.get(m.replyTo)">
-            Reply to {{ byId.get(m.replyTo)!.fromName }}
+            {{ t('chat.replyTo', { name: byId.get(m.replyTo)!.fromName }) }}
           </template>
           <template v-else>
-            Reply
+            {{ t('common.reply') }}
           </template>
         </button>
         <div class="chat-text">{{ m.displayText }}</div>
@@ -245,7 +248,7 @@ function onClickReplyTarget(id: string) {
         <div class="reply-banner-title">{{ replyBanner.title }}</div>
         <div v-if="replyBanner.subtitle" class="reply-banner-subtitle">{{ replyBanner.subtitle }}</div>
       </div>
-      <button class="secondary reply-cancel" type="button" @click="ui.clearReply">Cancel</button>
+      <button class="secondary reply-cancel" type="button" @click="ui.clearReply">{{ t('common.cancel') }}</button>
     </div>
 
     <div class="chat-input">
@@ -255,12 +258,12 @@ function onClickReplyTarget(id: string) {
         rows="1"
         maxlength="500"
         autocomplete="off"
-        placeholder="Type a message..."
+        :placeholder="String(t('chat.typeMessage'))"
         @keydown="onChatKeydown"
         @input="autoGrowChatInput"
         @focus="autoGrowChatInput"
       ></textarea>
-      <button class="icon-only" type="button" aria-label="Send" @click="onSend">
+      <button class="icon-only" type="button" :aria-label="String(t('chat.sendAria'))" @click="onSend">
         <svg class="icon" aria-hidden="true" focusable="false"><use xlink:href="/icons.svg#send"></use></svg>
       </button>
     </div>

@@ -4,12 +4,20 @@ import { storeToRefs } from 'pinia'
 import { useUiStore } from '../stores/ui'
 import { useSessionStore } from '../stores/session'
 import { confirmLeave } from '../utils/confirmLeave'
+import { useI18n } from 'vue-i18n'
+import { cycleLocale } from '../i18n'
 
 const ui = useUiStore()
 const session = useSessionStore()
 
+const { t, locale } = useI18n()
+
 const { settingsOpen, themeLabel } = storeToRefs(ui)
 const { status, techInfo, myName } = storeToRefs(session)
+
+function onCycleLanguage() {
+  cycleLocale()
+}
 
 function onBackdropClick(e: MouseEvent) {
   if (e.target && e.target === e.currentTarget) ui.closeSettings()
@@ -47,29 +55,44 @@ watchEffect((onCleanup) => {
     @click="onBackdropClick"
   >
     <div class="modal-card">
-      <div class="modal-title" id="settingsTitle">Settings</div>
+    <div class="modal-title" id="settingsTitle">{{ t('settings.title') }}</div>
 
       <div class="settings-tech">
-        <div v-if="myName" class="status">You: <strong>{{ myName }}</strong></div>
+        <div v-if="myName" class="status">{{ t('settings.youLabel') }} <strong>{{ myName }}</strong></div>
         <div v-if="status" class="status">{{ status }}</div>
         <div v-if="techInfo" class="muted">{{ techInfo }}</div>
       </div>
 
       <div class="settings-actions">
-        <button class="secondary" type="button" aria-label="Toggle theme" @click="ui.cycleTheme">
+        <button class="secondary" type="button" :aria-label="String(t('theme.toggleAria'))" @click="ui.cycleTheme">
           {{ themeLabel }}
         </button>
 
-        <button class="secondary" type="button" @click="onAbout">About</button>
+        <button
+          class="secondary"
+          type="button"
+          :aria-label="String(t('common.language'))"
+          @click="onCycleLanguage"
+        >
+          {{ t('common.language') }}: {{ t(`lang.${String(locale)}`) }}
+        </button>
 
-        <button class="secondary icon-only" type="button" aria-label="Logout" title="Logout" @click="onLogout">
+        <button class="secondary" type="button" @click="onAbout">{{ t('common.about') }}</button>
+
+        <button
+          class="secondary icon-only"
+          type="button"
+          :aria-label="String(t('common.logout'))"
+          :title="String(t('common.logout'))"
+          @click="onLogout"
+        >
           <svg class="icon" aria-hidden="true" focusable="false"><use xlink:href="/icons.svg#logout"></use></svg>
         </button>
       </div>
 
       <div class="modal-actions">
         <div></div>
-        <button class="secondary" type="button" @click="ui.closeSettings">Close</button>
+        <button class="secondary" type="button" @click="ui.closeSettings">{{ t('common.close') }}</button>
       </div>
     </div>
   </div>

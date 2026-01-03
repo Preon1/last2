@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia'
 import { computed, ref, watch } from 'vue'
+import { i18n } from '../i18n'
 
 export const useUiStore = defineStore('ui', () => {
   const settingsOpen = ref(false)
@@ -16,7 +17,11 @@ export const useUiStore = defineStore('ui', () => {
   const activeChatName = ref<string | null>(null)
   const unreadByChat = ref<Record<string, number>>({})
 
-  const activeChatLabel = computed(() => activeChatName.value ?? 'Group chat')
+  const activeChatLabel = computed(() => {
+    // Ensure this recomputes when locale changes.
+    void i18n.global.locale.value
+    return activeChatName.value ?? String(i18n.global.t('sidebar.groupChat'))
+  })
 
   function chatKey(name: string | null) {
     return name ? `u:${name}` : 'group'
@@ -49,9 +54,11 @@ export const useUiStore = defineStore('ui', () => {
   }
 
   const themeLabel = computed(() => {
+    // Ensure this recomputes when locale changes.
+    void i18n.global.locale.value
     const mode = themeMode.value
-    const label = mode === 'system' ? 'System' : mode === 'dark' ? 'Dark' : 'Light'
-    return `Theme: ${label}`
+    const modeKey = mode === 'system' ? 'theme.system' : mode === 'dark' ? 'theme.dark' : 'theme.light'
+    return String(i18n.global.t('theme.label', { mode: i18n.global.t(modeKey) }))
   })
 
   function applyTheme() {
