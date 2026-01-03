@@ -149,11 +149,20 @@ function makeTurnConfig() {
 
 function safeName(input) {
   if (typeof input !== 'string') return null;
+
   const trimmed = input.trim();
-  if (trimmed.length < 1 || trimmed.length > 32) return null;
-  // Allow simple characters; avoid confusing/abusive control chars
-  if (!/^[a-zA-Z0-9 _\-\.]+$/.test(trimmed)) return null;
-  return trimmed;
+  if (!trimmed) return null;
+
+  // Normalize to keep uniqueness stable across equivalent forms.
+  const normalized = typeof trimmed.normalize === 'function' ? trimmed.normalize('NFC') : trimmed;
+
+  // Max 20 Unicode code points (not UTF-16 code units).
+  if (Array.from(normalized).length > 20) return null;
+
+  // Disallow control characters (incl. newlines/tabs) for safety.
+  if (/\p{Cc}/u.test(normalized)) return null;
+
+  return normalized;
 }
 
 function safeChatText(input) {
@@ -201,6 +210,66 @@ const nameToId = new Map();
  * rooms: roomId -> { id, members:Set<string> }
  */
 const rooms = new Map();
+
+function pickRoomOwner(room) {
+  // Prefer existing owner if still present and connected.
+  const ownerId = room.ownerId;
+  if (ownerId && room.members.has(ownerId)) {
+    const u = users.get(ownerId);
+    if (u?.ws?.readyState === 1) return ownerId;
+  }
+
+  // Otherwise pick the first connected member.
+  for (const memberId of room.members) {
+    const u = users.get(memberId);
+    if (u?.ws?.readyState === 1) return memberId;
+  }
+  return null;
+}
+
+function removeJoinRequestFromRoom(room, requesterId) {
+  if (!room) return;
+
+  if (room.joinActive === requesterId) {
+    room.joinActive = null;
+  }
+
+  if (Array.isArray(room.joinQueue)) {
+    room.joinQueue = room.joinQueue.filter((id) => id !== requesterId);
+  }
+}
+
+function pumpJoinQueue(room) {
+  if (!room) return;
+  if (room.joinActive) return;
+  if (!Array.isArray(room.joinQueue) || room.joinQueue.length === 0) return;
+
+  // Drop stale requests.
+  while (room.joinQueue.length) {
+    const nextId = room.joinQueue[0];
+    const requester = users.get(nextId);
+    if (!requester || !requester.name) {
+      room.joinQueue.shift();
+      continue;
+    }
+
+    const ownerId = pickRoomOwner(room);
+    if (!ownerId) {
+      // Nobody online to approve. Reject all pending requests.
+      for (const rid of room.joinQueue.splice(0)) {
+        const u = users.get(rid);
+        if (u) u.joinPendingRoomId = null;
+        if (u?.ws?.readyState === 1) send(u.ws, { type: 'callJoinResult', ok: false, reason: 'no_approver' });
+      }
+      return;
+    }
+
+    room.ownerId = ownerId;
+    room.joinActive = nextId;
+    send(users.get(ownerId).ws, { type: 'joinRequest', from: requester.id, fromName: requester.name, roomId: room.id });
+    return;
+  }
+}
 
 /**
  * Web Push subscriptions (ephemeral server-side; memory only): userId -> subscription
@@ -311,7 +380,7 @@ function getRoom(roomId) {
 }
 
 function ensureRoom(roomId) {
-  if (!rooms.has(roomId)) rooms.set(roomId, { id: roomId, members: new Set() });
+  if (!rooms.has(roomId)) rooms.set(roomId, { id: roomId, members: new Set(), ownerId: null, joinQueue: [], joinActive: null });
   return rooms.get(roomId);
 }
 
@@ -322,6 +391,11 @@ function leaveRoom(user) {
   user.roomId = null;
   if (!room) return;
   room.members.delete(user.id);
+
+  // If this user was involved in join requests, remove them.
+  removeJoinRequestFromRoom(room, user.id);
+  if (room.ownerId === user.id) room.ownerId = pickRoomOwner(room);
+
   for (const memberId of room.members) {
     const m = users.get(memberId);
     if (!m) continue;
@@ -337,8 +411,26 @@ function leaveRoom(user) {
         send(last.ws, { type: 'callEnded', reason: 'alone' });
       }
     }
+
+    // Reject any pending joiners.
+    if (Array.isArray(room.joinQueue)) {
+      for (const jid of room.joinQueue) {
+        const u = users.get(jid);
+        if (u) u.joinPendingRoomId = null;
+        if (u?.ws?.readyState === 1) send(u.ws, { type: 'callJoinResult', ok: false, reason: 'ended' });
+      }
+    }
+    if (room.joinActive) {
+      const u = users.get(room.joinActive);
+      if (u) u.joinPendingRoomId = null;
+      if (u?.ws?.readyState === 1) send(u.ws, { type: 'callJoinResult', ok: false, reason: 'ended' });
+    }
+
     rooms.delete(rid);
+    return;
   }
+
+  pumpJoinQueue(room);
 }
 
 function broadcastChat(fromUser, text) {
@@ -478,7 +570,7 @@ function rateLimit(user, nowMs) {
 
 wss.on('connection', (ws, req) => {
   const userId = makeId();
-  const user = { id: userId, name: null, ws, lastMsgAt: Date.now(), roomId: null, _rl: null };
+  const user = { id: userId, name: null, ws, lastMsgAt: Date.now(), roomId: null, joinPendingRoomId: null, _rl: null };
   users.set(userId, user);
 
   const clientIp = req?.socket?.remoteAddress ?? null;
@@ -583,6 +675,8 @@ wss.on('connection', (ws, req) => {
       room.members.add(user.id);
       room.members.add(callee.id);
 
+      if (!room.ownerId) room.ownerId = user.id;
+
       user.roomId = rid;
       callee.roomId = rid;
 
@@ -597,6 +691,120 @@ wss.on('connection', (ws, req) => {
       });
       send(ws, { type: 'callStartResult', ok: true });
       broadcastPresence();
+      return;
+    }
+
+    if (msg.type === 'callJoinRequest') {
+      const to = typeof msg.to === 'string' ? msg.to : null;
+      if (!to || !users.has(to)) {
+        send(ws, { type: 'callJoinResult', ok: false, reason: 'not_found' });
+        return;
+      }
+      if (to === userId) {
+        send(ws, { type: 'callJoinResult', ok: false, reason: 'self' });
+        return;
+      }
+      if (user.roomId) {
+        send(ws, { type: 'callJoinResult', ok: false, reason: 'already_in_call' });
+        return;
+      }
+      if (user.joinPendingRoomId) {
+        send(ws, { type: 'callJoinResult', ok: false, reason: 'already_pending' });
+        return;
+      }
+
+      const callee = users.get(to);
+      if (!callee?.name) {
+        send(ws, { type: 'callJoinResult', ok: false, reason: 'not_ready' });
+        return;
+      }
+      const rid = callee.roomId;
+      const room = getRoom(rid);
+      if (!rid || !room) {
+        send(ws, { type: 'callJoinResult', ok: false, reason: 'not_in_call' });
+        return;
+      }
+
+      // Enqueue join request for this room.
+      if (!Array.isArray(room.joinQueue)) room.joinQueue = [];
+      if (!room.joinQueue.includes(user.id) && room.joinActive !== user.id) {
+        room.joinQueue.push(user.id);
+      }
+      user.joinPendingRoomId = rid;
+
+      send(ws, { type: 'callJoinPending', roomId: rid, toName: callee.name });
+      pumpJoinQueue(room);
+      return;
+    }
+
+    if (msg.type === 'callJoinCancel') {
+      const rid = user.joinPendingRoomId;
+      if (!rid) return;
+      const room = getRoom(rid);
+      if (room) {
+        removeJoinRequestFromRoom(room, user.id);
+        pumpJoinQueue(room);
+      }
+      user.joinPendingRoomId = null;
+      send(ws, { type: 'callJoinResult', ok: false, reason: 'canceled' });
+      return;
+    }
+
+    if (msg.type === 'callJoinAccept' || msg.type === 'callJoinReject') {
+      const from = typeof msg.from === 'string' ? msg.from : null;
+      const rid = typeof msg.roomId === 'string' ? msg.roomId : null;
+      if (!from || !rid) return;
+      const room = getRoom(rid);
+      if (!room) return;
+
+      // Only the current room owner can approve.
+      const ownerId = pickRoomOwner(room);
+      room.ownerId = ownerId;
+      if (!ownerId || ownerId !== userId) return;
+      if (!room.members.has(userId)) return;
+      if (room.joinActive !== from) return;
+
+      const requester = users.get(from);
+      if (!requester || !requester.name) {
+        room.joinActive = null;
+        pumpJoinQueue(room);
+        return;
+      }
+
+      if (msg.type === 'callJoinReject') {
+        requester.joinPendingRoomId = null;
+        if (requester.ws.readyState === 1) send(requester.ws, { type: 'callJoinResult', ok: false, reason: 'rejected' });
+        room.joinActive = null;
+        pumpJoinQueue(room);
+        return;
+      }
+
+      // Accept: add requester to the room.
+      room.members.add(requester.id);
+      requester.roomId = rid;
+      requester.joinPendingRoomId = null;
+
+      const peer = { id: requester.id, name: requester.name };
+      for (const memberId of room.members) {
+        if (memberId === requester.id) continue;
+        const m = users.get(memberId);
+        if (!m) continue;
+        send(m.ws, { type: 'roomPeerJoined', roomId: rid, peer });
+      }
+
+      const peers = Array.from(room.members)
+        .filter((id) => id !== requester.id)
+        .map((id) => {
+          const u2 = users.get(id);
+          return u2 ? { id: u2.id, name: u2.name } : null;
+        })
+        .filter(Boolean);
+
+      send(requester.ws, { type: 'roomPeers', roomId: rid, peers });
+      broadcastPresence();
+
+      room.joinActive = null;
+      pumpJoinQueue(room);
       return;
     }
 
@@ -689,11 +897,9 @@ wss.on('connection', (ws, req) => {
         return;
       }
 
-      // Replies use a reserved prefix that intentionally begins with '@'.
-      // Don’t treat it as a private message to user named "reply".
-      const pm = (raw.startsWith('@reply ') || raw.startsWith('@reply[')) ? null : parsePrivatePrefix(raw);
-      if (pm) {
-        const toId = nameToId.get(pm.toName);
+      const toName = typeof msg.toName === 'string' ? safeName(msg.toName) : null;
+      if (toName) {
+        const toId = nameToId.get(toName);
         const toUser = toId ? users.get(toId) : null;
         if (!toUser || !toUser.name) {
           send(ws, { type: 'error', code: 'PM_NOT_FOUND' });
@@ -703,7 +909,7 @@ wss.on('connection', (ws, req) => {
           send(ws, { type: 'error', code: 'PM_SELF' });
           return;
         }
-        sendPrivateChat(user, toUser, pm.body);
+        sendPrivateChat(user, toUser, raw);
         return;
       }
 

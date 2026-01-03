@@ -13,7 +13,9 @@ const { themeLabel } = storeToRefs(ui)
 const nameInput = ref('')
 
 function onJoin() {
-  emit('join', nameInput.value)
+  const trimmed = nameInput.value.trim()
+  if (!trimmed) return
+  emit('join', trimmed)
 }
 </script>
 
@@ -33,7 +35,7 @@ function onJoin() {
       <form class="setup-form" autocomplete="off" @submit.prevent="onJoin">
         <label class="field" for="name">
           <span class="field-label">Your name</span>
-          <input id="name" v-model="nameInput" maxlength="32" inputmode="text" placeholder="e.g. Alex" />
+          <input id="name" v-model="nameInput" maxlength="20" inputmode="text" placeholder="e.g. Alex" />
         </label>
 
         <button class="join" type="submit">Join</button>

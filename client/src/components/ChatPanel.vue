@@ -12,9 +12,9 @@ const call = useCallStore()
 
 const { chat, users } = storeToRefs(session)
 const { replyToId, activeChatName, activeChatLabel } = storeToRefs(ui)
-const { inCall, outgoingPending, pendingIncomingFrom } = storeToRefs(call)
+const { inCall, outgoingPending, pendingIncomingFrom, joinPending, joinConfirmToId, joinConfirmToName } = storeToRefs(call)
 
-const showCallPanel = computed(() => Boolean(pendingIncomingFrom.value) || outgoingPending.value || inCall.value)
+const showCallPanel = computed(() => Boolean(pendingIncomingFrom.value) || outgoingPending.value || inCall.value || joinPending.value)
 
 const activePeer = computed(() => {
   const name = activeChatName.value
@@ -26,17 +26,21 @@ const canCallActivePeer = computed(() => {
   const peer = activePeer.value
   if (!peer) return false
   if (!peer.id || !peer.name) return false
-  if (peer.busy) return false
   // Don't allow starting a new call while any call state is active.
   if (pendingIncomingFrom.value) return false
   if (outgoingPending.value) return false
   if (inCall.value) return false
+  if (joinPending.value) return false
   return true
 })
 
 function onCallActivePeer() {
   const peer = activePeer.value
   if (!peer || !peer.id || !peer.name) return
+  if (peer.busy) {
+    call.openJoinConfirm(peer.id, peer.name)
+    return
+  }
   void call.startCall(peer.id, peer.name)
 }
 
@@ -94,7 +98,7 @@ function onSend() {
   const body = chatInput.value.trim()
   if (!body) return
   const text = replyToId.value ? `@reply ${replyToId.value}\n${body}` : body
-  session.sendChat(text)
+  session.sendChat(text, activeChatName.value)
   chatInput.value = ''
   if (replyToId.value) ui.clearReply()
 
@@ -186,6 +190,26 @@ function onClickReplyTarget(id: string) {
       >
         <svg class="icon" aria-hidden="true" focusable="false"><use xlink:href="/icons.svg#call"></use></svg>
       </button>
+    </div>
+
+    <div
+      v-if="joinConfirmToId"
+      class="modal"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="joinConfirmTitle"
+      @click="(e) => { if (e.target === e.currentTarget) call.cancelJoinConfirm() }"
+    >
+      <div class="modal-card">
+        <div class="modal-title" id="joinConfirmTitle">Join ongoing call?</div>
+        <div class="muted" style="margin-bottom: 12px;">
+          {{ joinConfirmToName ? `You are attempting to join ${joinConfirmToName}'s ongoing call.` : 'You are attempting to join an ongoing call.' }}
+        </div>
+        <div class="modal-actions">
+          <button class="secondary" type="button" @click="call.cancelJoinConfirm">Cancel</button>
+          <button type="button" @click="call.confirmJoinAttempt">Proceed</button>
+        </div>
+      </div>
     </div>
 
     <div ref="chatMessagesEl" class="chat-messages" aria-live="polite">

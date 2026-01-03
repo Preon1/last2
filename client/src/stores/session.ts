@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
+import { useUiStore } from './ui'
 
 export type PresenceUser = {
   id: string
@@ -71,6 +72,7 @@ function wsUrl() {
 }
 
 export const useSessionStore = defineStore('session', () => {
+  const ui = useUiStore()
   const ws = ref<WebSocket | null>(null)
 
   const myId = ref<string | null>(null)
@@ -232,6 +234,27 @@ export const useSessionStore = defineStore('session', () => {
         }
 
         chat.value.push(msg)
+
+        // Unread counters (best-effort): bump only for messages not authored by me
+        // and not currently in the active chat.
+        try {
+          if (myName.value && fromName === myName.value) return
+
+          if (!isPrivate) {
+            if (ui.activeChatName !== null) ui.bumpUnread(null)
+            return
+          }
+
+          // For private messages, map to the "other" participant.
+          const other = myName.value && fromName === myName.value
+            ? (toName ?? null)
+            : fromName
+
+          if (!other) return
+          if (ui.activeChatName !== other) ui.bumpUnread(other)
+        } catch {
+          // ignore
+        }
         return
       }
 
@@ -259,10 +282,11 @@ export const useSessionStore = defineStore('session', () => {
     })
   }
 
-  function sendChat(text: string) {
+  function sendChat(text: string, toName?: string | null) {
     const t = text.trim()
     if (!t) return
-    send({ type: 'chatSend', text: t })
+    const target = (toName ?? '').trim()
+    send(target ? { type: 'chatSend', text: t, toName: target } : { type: 'chatSend', text: t })
   }
 
   return {

@@ -50,6 +50,19 @@ export const useCallStore = defineStore('call', () => {
   const outgoingPending = ref(false)
   const outgoingPendingName = ref('')
 
+  // Join ongoing call flow
+  const joinConfirmToId = ref<string | null>(null)
+  const joinConfirmToName = ref<string>('')
+
+  const joinPending = ref(false)
+  const joinPendingToName = ref('')
+  const joinPendingRoomId = ref<string | null>(null)
+
+  // Server sends one join request at a time (queue is server-side).
+  const joinRequestFromId = ref<string | null>(null)
+  const joinRequestFromName = ref<string>('')
+  const joinRequestRoomId = ref<string | null>(null)
+
   const timerStartMs = ref<number | null>(null)
   const timerText = ref('00:00')
 
@@ -178,6 +191,17 @@ export const useCallStore = defineStore('call', () => {
     outgoingPending.value = false
     outgoingPendingName.value = ''
 
+    joinConfirmToId.value = null
+    joinConfirmToName.value = ''
+
+    joinPending.value = false
+    joinPendingToName.value = ''
+    joinPendingRoomId.value = null
+
+    joinRequestFromId.value = null
+    joinRequestFromName.value = ''
+    joinRequestRoomId.value = null
+
     resetTimer()
 
     try {
@@ -186,6 +210,64 @@ export const useCallStore = defineStore('call', () => {
       // ignore
     }
     localStream = null
+  }
+
+  function openJoinConfirm(toId: string, toName: string) {
+    joinConfirmToId.value = toId
+    joinConfirmToName.value = toName
+  }
+
+  function cancelJoinConfirm() {
+    joinConfirmToId.value = null
+    joinConfirmToName.value = ''
+  }
+
+  async function requestJoinOngoingCall(toId: string, toName: string) {
+    if (joinPending.value) return
+    if (pendingIncomingFrom.value || outgoingPending.value || inCall.value) return
+
+    try {
+      await ensureMic()
+    } catch (err) {
+      status.value = micErrorToStatus(err)
+      return
+    }
+
+    joinPending.value = true
+    joinPendingToName.value = toName
+    status.value = toName ? `Requesting to join ${toName}…` : 'Requesting to join…'
+    session.send({ type: 'callJoinRequest', to: toId })
+  }
+
+  async function confirmJoinAttempt() {
+    const toId = joinConfirmToId.value
+    const toName = joinConfirmToName.value
+    if (!toId || !toName) return
+    cancelJoinConfirm()
+    await requestJoinOngoingCall(toId, toName)
+  }
+
+  function cancelJoinPending() {
+    if (!joinPending.value) return
+    session.send({ type: 'callJoinCancel' })
+    status.value = ''
+    resetCallState()
+  }
+
+  function acceptJoinRequest() {
+    if (!joinRequestFromId.value) return
+    session.send({ type: 'callJoinAccept', from: joinRequestFromId.value, roomId: joinRequestRoomId.value })
+    joinRequestFromId.value = null
+    joinRequestFromName.value = ''
+    joinRequestRoomId.value = null
+  }
+
+  function rejectJoinRequest() {
+    if (!joinRequestFromId.value) return
+    session.send({ type: 'callJoinReject', from: joinRequestFromId.value, roomId: joinRequestRoomId.value })
+    joinRequestFromId.value = null
+    joinRequestFromName.value = ''
+    joinRequestRoomId.value = null
   }
 
   async function ensurePeerConnection(peerId: string) {
@@ -327,6 +409,31 @@ export const useCallStore = defineStore('call', () => {
       return
     }
 
+    if (type === 'callJoinPending') {
+      joinPending.value = true
+      joinPendingRoomId.value = asString(obj.roomId)
+      joinPendingToName.value = asString(obj.toName) ?? joinPendingToName.value
+      status.value = joinPendingToName.value ? `Waiting to join ${joinPendingToName.value}…` : 'Waiting to join…'
+      return
+    }
+
+    if (type === 'callJoinResult') {
+      const ok = asBool(obj.ok)
+      const reason = asString(obj.reason) ?? ''
+      if (!ok) {
+        status.value = reason ? `Join failed: ${reason}` : 'Join failed.'
+        resetCallState()
+      }
+      return
+    }
+
+    if (type === 'joinRequest') {
+      joinRequestFromId.value = asString(obj.from)
+      joinRequestFromName.value = asString(obj.fromName) ?? ''
+      joinRequestRoomId.value = asString(obj.roomId)
+      return
+    }
+
     if (type === 'callRejected') {
       if (outgoingPending.value && !roomId.value) {
         outgoingPending.value = false
@@ -347,6 +454,11 @@ export const useCallStore = defineStore('call', () => {
       roomId.value = asString(obj.roomId) ?? roomId.value
       outgoingPending.value = false
       outgoingPendingName.value = ''
+
+      // If we were waiting to join, the server has now admitted us.
+      joinPending.value = false
+      joinPendingToName.value = ''
+      joinPendingRoomId.value = null
 
       const peersArr = Array.isArray(obj.peers) ? (obj.peers as unknown[]) : []
       try {
@@ -472,9 +584,21 @@ export const useCallStore = defineStore('call', () => {
     pendingIncomingFromName,
     outgoingPending,
     outgoingPendingName,
+    joinConfirmToId,
+    joinConfirmToName,
+    joinPending,
+    joinPendingToName,
+    joinRequestFromId,
+    joinRequestFromName,
     timerText,
     remoteStreams,
     startCall,
+    openJoinConfirm,
+    cancelJoinConfirm,
+    confirmJoinAttempt,
+    cancelJoinPending,
+    acceptJoinRequest,
+    rejectJoinRequest,
     acceptIncoming,
     rejectIncoming,
     hangup,
