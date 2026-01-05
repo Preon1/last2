@@ -10,7 +10,7 @@ const ui = useUiStore()
 
 const { t } = useI18n()
 
-const { chat } = storeToRefs(session)
+const { chat, users } = storeToRefs(session)
 const { replyToId, activeChatName } = storeToRefs(ui)
 
 // Call button + join confirm are handled by ChatTopBar, and the call panel is mounted globally.
@@ -26,6 +26,15 @@ const filteredChat = computed(() => {
 
   // Private chat view with selected user
   return chat.value.filter((m) => m.private && (m.fromName === peer || m.toName === peer))
+})
+
+const canSend = computed(() => {
+  const peer = activeChatName.value
+  // Group chat is always sendable.
+  if (!peer) return true
+
+  // Private chat is only sendable if the user is currently online.
+  return users.value.some((u) => u.name === peer)
 })
 
 function parseReply(text: string): { replyTo: string | null; body: string } {
@@ -66,6 +75,7 @@ const replyBanner = computed(() => {
 })
 
 function onSend() {
+  if (!canSend.value) return
   const body = chatInput.value.trim()
   if (!body) return
   const text = replyToId.value ? `@reply ${replyToId.value}\n${body}` : body
@@ -204,6 +214,7 @@ function onClickReplyTarget(id: string) {
       <textarea
         ref="chatInputEl"
         v-model="chatInput"
+        :disabled="!canSend"
         rows="1"
         maxlength="500"
         autocomplete="off"
@@ -211,7 +222,13 @@ function onClickReplyTarget(id: string) {
         @keydown="onChatKeydown"
         @input="autoGrowChatInput()"
         ></textarea>
-        <button class="icon-only chat-send" type="button" :aria-label="String(t('chat.sendAria'))" @click="onSend">
+        <button
+          class="icon-only chat-send"
+          type="button"
+          :disabled="!canSend"
+          :aria-label="String(t('chat.sendAria'))"
+          @click="onSend"
+        >
           <svg class="icon" aria-hidden="true" focusable="false"><use xlink:href="/icons.svg#send"></use></svg>
         </button>
       </div>
