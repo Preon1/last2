@@ -156,6 +156,11 @@ body {
   display: flex;
   gap: 10px;
   align-items: center;
+  flex-wrap: wrap;
+  flex-direction: row;
+  align-content: center;
+  justify-content: flex-start;
+  align-items: flex-end;
 }
 
 .setup-brand {
@@ -188,12 +193,6 @@ body {
 .field-label {
   font-size: 14px;
   color: var(--muted);
-}
-
-button.join {
-  width: 100%;
-  padding: 12px 14px;
-  font-size: 16px;
 }
 
 .brand-title {
@@ -628,6 +627,9 @@ button:disabled {
   min-height: 0;
   width: 100%;
   display: flex;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-width: thin;
 }
 
 .page-inner {

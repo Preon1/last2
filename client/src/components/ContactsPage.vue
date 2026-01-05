@@ -33,8 +33,6 @@ function isActive(name: string | null) {
 <template>
   <section class="page">
     <div class="page-inner">
-      <div class="page-title">{{ t('common.online') }}</div>
-
       <ul class="contacts">
         <li>
           <button class="contact-row" type="button" :class="{ active: isActive(null) }" @click="onOpenPublic">

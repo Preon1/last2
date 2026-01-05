@@ -29,8 +29,11 @@ function onLogout() {
 </script>
 
 <template>
-  <section class="page headergap">
+  <section class="page">
     <div class="page-inner">
+
+    <div class="headergap"></div>
+
       <div class="settings-tech">
         <div v-if="myName" class="status">{{ t('settings.youLabel') }} <strong>{{ myName }}</strong></div>
         <div v-if="status" class="status">{{ status }}</div>
