@@ -77,6 +77,34 @@ export const useSessionStore = defineStore('session', () => {
   const ui = useUiStore()
   const ws = ref<WebSocket | null>(null)
 
+  const pingTimer = ref<number | null>(null)
+
+  const outboxTimer = ref<number | null>(null)
+  const outbox = new Map<string, { json: string; attempts: number; nextAt: number }>()
+  const OUTBOX_MAX_ATTEMPTS = 6
+  const OUTBOX_BASE_DELAY_MS = 600
+  const OUTBOX_MAX_DELAY_MS = 8000
+
+  const seenMsgIds = new Set<string>()
+  const seenMsgIdQueue: string[] = []
+  const SEEN_MSGIDS_MAX = 2000
+
+  function calcOutboxDelayMs(attempts: number) {
+    const exp = Math.max(0, attempts - 1)
+    const delay = OUTBOX_BASE_DELAY_MS * Math.pow(2, exp)
+    return Math.min(OUTBOX_MAX_DELAY_MS, Math.max(OUTBOX_BASE_DELAY_MS, delay))
+  }
+
+  function makeClientMsgId() {
+    // Browser support is good for crypto.randomUUID; fallback kept defensive.
+    try {
+      if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) return crypto.randomUUID()
+    } catch {
+      // ignore
+    }
+    return `${Date.now()}-${Math.random().toString(16).slice(2)}`
+  }
+
   const myId = ref<string | null>(null)
   const myName = ref<string | null>(null)
 
@@ -128,9 +156,108 @@ export const useSessionStore = defineStore('session', () => {
   const connected = computed(() => ws.value?.readyState === WebSocket.OPEN)
   const inApp = computed(() => Boolean(myName.value))
 
-  function send(obj: unknown) {
+  function sendRaw(obj: unknown) {
     if (!ws.value || ws.value.readyState !== WebSocket.OPEN) return
     ws.value.send(JSON.stringify(obj))
+  }
+
+  function startOutbox() {
+    stopOutbox()
+    outboxTimer.value = window.setInterval(() => {
+      const sock = ws.value
+      if (!sock || sock.readyState !== WebSocket.OPEN) return
+
+      const now = Date.now()
+      for (const [cMsgId, entry] of outbox) {
+        if (entry.nextAt > now) continue
+        if (entry.attempts >= OUTBOX_MAX_ATTEMPTS) {
+          outbox.delete(cMsgId)
+          continue
+        }
+        try {
+          sock.send(entry.json)
+        } catch {
+          // ignore
+        }
+        entry.attempts += 1
+        entry.nextAt = now + calcOutboxDelayMs(entry.attempts)
+      }
+    }, 500)
+  }
+
+  function stopOutbox() {
+    if (outboxTimer.value != null) {
+      window.clearInterval(outboxTimer.value)
+      outboxTimer.value = null
+    }
+    outbox.clear()
+  }
+
+  function sendReliable(obj: Record<string, unknown>) {
+    if (!ws.value || ws.value.readyState !== WebSocket.OPEN) return
+    const cMsgId = makeClientMsgId()
+    const payload = { ...obj, cMsgId }
+    const json = JSON.stringify(payload)
+
+    // Immediate send + queue for retry until receipt.
+    try {
+      ws.value.send(json)
+    } catch {
+      // ignore
+    }
+    outbox.set(cMsgId, {
+      json,
+      attempts: 1,
+      nextAt: Date.now() + calcOutboxDelayMs(1),
+    })
+  }
+
+  function send(obj: unknown) {
+    const o = asObj(obj)
+    const type = o ? asString(o.type) : null
+    if (type === 'ack' || type === 'ping' || type === 'clientHello' || type === 'signal') {
+      sendRaw(obj)
+      return
+    }
+
+    if (o && type) {
+      sendReliable(o as Record<string, unknown>)
+      return
+    }
+
+    sendRaw(obj)
+  }
+
+  function ack(msgId: string) {
+    if (!msgId) return
+    sendRaw({ type: 'ack', msgId })
+  }
+
+  function rememberMsgId(msgId: string): boolean {
+    if (!msgId) return false
+    if (seenMsgIds.has(msgId)) return true
+    seenMsgIds.add(msgId)
+    seenMsgIdQueue.push(msgId)
+    if (seenMsgIdQueue.length > SEEN_MSGIDS_MAX) {
+      const old = seenMsgIdQueue.shift()
+      if (old) seenMsgIds.delete(old)
+    }
+    return false
+  }
+
+  function stopPing() {
+    if (pingTimer.value != null) {
+      window.clearInterval(pingTimer.value)
+      pingTimer.value = null
+    }
+  }
+
+  function startPing() {
+    stopPing()
+    // Keep it modest to avoid noisy traffic; presence also refreshes server-side.
+    pingTimer.value = window.setInterval(() => {
+      send({ type: 'ping' })
+    }, 10000)
   }
 
   function registerInboundHandler(handler: (type: string, obj: Record<string, unknown>) => void) {
@@ -147,6 +274,9 @@ export const useSessionStore = defineStore('session', () => {
     } catch {
       // ignore
     }
+
+    stopPing()
+    stopOutbox()
     ws.value = null
     myId.value = null
     myName.value = null
@@ -184,6 +314,9 @@ export const useSessionStore = defineStore('session', () => {
     ws.value = sock
 
     sock.addEventListener('open', () => {
+      // Feature negotiation (server uses this to enable ack+retry).
+      sendRaw({ type: 'clientHello', features: { ack: true } })
+      startOutbox()
       send({ type: 'setName', name: desiredName })
     })
 
@@ -200,6 +333,14 @@ export const useSessionStore = defineStore('session', () => {
       const type = asString(obj.type)
       if (!type) return
 
+      // Reliable delivery: if msgId is present, ack it; dedupe retries.
+      const msgId = asString((obj as InboundMsgAny).msgId)
+      if (msgId) {
+        ack(msgId)
+        const isDup = rememberMsgId(msgId)
+        if (isDup) return
+      }
+
       if (type === 'hello') {
         const id = asString(obj.id)
         if (id) myId.value = id
@@ -210,6 +351,14 @@ export const useSessionStore = defineStore('session', () => {
         return
       }
 
+      if (type === 'receipt') {
+        const cMsgId = asString(obj.cMsgId)
+        const ok = asBool(obj.ok)
+        // ok=false is still a terminal receipt; we stop retrying.
+        if (cMsgId && ok !== null) outbox.delete(cMsgId)
+        return
+      }
+
       if (type === 'nameResult') {
         const ok = asBool(obj.ok)
         const name = asString(obj.name)
@@ -217,6 +366,7 @@ export const useSessionStore = defineStore('session', () => {
         if (ok && name) {
           myName.value = name
           status.value = ''
+          startPing()
         } else {
           status.value =
             reason === 'taken'
@@ -229,6 +379,11 @@ export const useSessionStore = defineStore('session', () => {
       if (type === 'presence') {
         users.value = Array.isArray(obj.users) ? (obj.users as PresenceUser[]) : []
         voiceInfo.value = asVoiceInfo(obj.voice)
+        return
+      }
+
+      if (type === 'pong') {
+        // no-op (kept for potential diagnostics later)
         return
       }
 
@@ -315,6 +470,8 @@ export const useSessionStore = defineStore('session', () => {
     sock.addEventListener('close', () => {
       if (myName.value) status.value = String(i18n.global.t('session.disconnected'))
       // keep state; user can reconnect
+      stopPing()
+      stopOutbox()
     })
 
     sock.addEventListener('error', () => {

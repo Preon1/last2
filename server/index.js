@@ -211,6 +211,155 @@ const nameToId = new Map();
  */
 const rooms = new Map();
 
+// Reliable delivery (RAM-only): message id + client ack + limited retries.
+// Enabled per-client after it sends {type:'clientHello', features:{ack:true}}.
+const pendingReliable = new Map(); // userId -> Map<msgId, { json: string, attempts: number, nextAt: number }>
+const RELIABLE_MAX_ATTEMPTS = Number(process.env.RELIABLE_MAX_ATTEMPTS ?? 5);
+const RELIABLE_BASE_DELAY_MS = Number(process.env.RELIABLE_BASE_DELAY_MS ?? 800);
+const RELIABLE_MAX_DELAY_MS = Number(process.env.RELIABLE_MAX_DELAY_MS ?? 8000);
+const RELIABLE_PUMP_MS = Number(process.env.RELIABLE_PUMP_MS ?? 500);
+const PRESENCE_TICK_MS = Number(process.env.PRESENCE_TICK_MS ?? 10000);
+const STALE_WS_MS = Number(process.env.STALE_WS_MS ?? 45000);
+const CLIENT_MSGIDS_MAX = Number(process.env.CLIENT_MSGIDS_MAX ?? 2000);
+
+function calcRetryDelayMs(attempts) {
+  // attempts starts at 1 for the initial send.
+  const exp = Math.max(0, attempts - 1);
+  const delay = RELIABLE_BASE_DELAY_MS * Math.pow(2, exp);
+  return Math.min(RELIABLE_MAX_DELAY_MS, Math.max(RELIABLE_BASE_DELAY_MS, delay));
+}
+
+function queueReliable(userId, key, msgId, json) {
+  if (!pendingReliable.has(userId)) pendingReliable.set(userId, new Map());
+  const perUser = pendingReliable.get(userId);
+  perUser.set(key, { msgId, json, attempts: 1, nextAt: Date.now() + calcRetryDelayMs(1) });
+}
+
+function ackReliable(userId, msgId) {
+  const perUser = pendingReliable.get(userId);
+  if (!perUser) return;
+
+  // msgId isn't necessarily the map key when we coalesce state messages.
+  for (const [key, entry] of perUser) {
+    if (entry.msgId === msgId) {
+      perUser.delete(key);
+      break;
+    }
+  }
+  if (perUser.size === 0) pendingReliable.delete(userId);
+}
+
+function flushReliableForUser(user) {
+  if (!user?.id) return;
+  if (!user?.ws || user.ws.readyState !== 1) return;
+  if (!user.supportsAck) return;
+
+  const perUser = pendingReliable.get(user.id);
+  if (!perUser || perUser.size === 0) return;
+
+  const now = Date.now();
+  for (const [key, entry] of perUser) {
+    if (entry.nextAt > now) continue;
+
+    if (entry.attempts >= RELIABLE_MAX_ATTEMPTS) {
+      perUser.delete(key);
+      continue;
+    }
+
+    try {
+      user.ws.send(entry.json);
+      entry.attempts += 1;
+      entry.nextAt = now + calcRetryDelayMs(entry.attempts);
+    } catch {
+      // If send throws, we'll try again later.
+      entry.attempts += 1;
+      entry.nextAt = now + calcRetryDelayMs(entry.attempts);
+    }
+  }
+
+  if (perUser.size === 0) pendingReliable.delete(user.id);
+}
+
+function sendBestEffort(ws, obj) {
+  if (!ws || ws.readyState !== 1) return;
+  try {
+    ws.send(JSON.stringify(obj));
+  } catch {
+    // ignore
+  }
+}
+
+function sendReliableToUser(user, obj, opts = null) {
+  if (!user?.ws || user.ws.readyState !== 1) return;
+  if (!user.supportsAck) {
+    sendBestEffort(user.ws, obj);
+    return;
+  }
+
+  const msgId = typeof obj.msgId === 'string' && obj.msgId ? obj.msgId : makeMsgId();
+  const coalesceKey = opts && typeof opts.coalesceKey === 'string' ? opts.coalesceKey : null;
+  const key = coalesceKey ?? msgId;
+  const payload = { ...obj, msgId, reliable: true };
+  const json = JSON.stringify(payload);
+
+  // Best-effort immediate send + queue for retry until ack.
+  try {
+    user.ws.send(json);
+  } catch {
+    // ignore immediate failures; retry loop will handle.
+  }
+  queueReliable(user.id, key, msgId, json);
+}
+
+function send(ws, obj, opts = null) {
+  if (!ws || ws.readyState !== 1) return;
+
+  // Default: reliable for everything once the client supports acks.
+  const reliable = !(opts && opts.reliable === false);
+
+  const userId = ws && ws._lrcomUserId ? String(ws._lrcomUserId) : null;
+  const u = userId ? users.get(userId) : null;
+
+  if (reliable && u) {
+    sendReliableToUser(u, obj, opts);
+    return;
+  }
+
+  sendBestEffort(ws, obj);
+}
+
+function rememberClientReceipt(user, cMsgId, receipt) {
+  if (!user._clientReceipts) {
+    user._clientReceipts = new Map();
+    user._clientReceiptQueue = [];
+  }
+
+  user._clientReceipts.set(cMsgId, receipt);
+  user._clientReceiptQueue.push(cMsgId);
+  if (user._clientReceiptQueue.length > CLIENT_MSGIDS_MAX) {
+    const old = user._clientReceiptQueue.shift();
+    if (old) user._clientReceipts.delete(old);
+  }
+}
+
+function getClientReceipt(user, cMsgId) {
+  return user?._clientReceipts?.get(cMsgId) ?? null;
+}
+
+function sendClientReceipt(user, ws, cMsgId, ok, code = null) {
+  if (!cMsgId) return;
+  const receipt = {
+    type: 'receipt',
+    cMsgId,
+    ok: Boolean(ok),
+    ...(code ? { code } : {}),
+    atIso: new Date().toISOString(),
+  };
+  rememberClientReceipt(user, cMsgId, receipt);
+  // Coalesce per cMsgId so re-sends don't grow the reliable queue.
+  send(ws, receipt, { coalesceKey: `receipt:${cMsgId}` });
+}
+
 function pickRoomOwner(room) {
   // Prefer existing owner if still present and connected.
   const ownerId = room.ownerId;
@@ -266,7 +415,10 @@ function pumpJoinQueue(room) {
 
     room.ownerId = ownerId;
     room.joinActive = nextId;
-    send(users.get(ownerId).ws, { type: 'joinRequest', from: requester.id, fromName: requester.name, roomId: room.id });
+    const owner = users.get(ownerId);
+    if (owner?.ws?.readyState === 1) {
+      send(owner.ws, { type: 'joinRequest', from: requester.id, fromName: requester.name, roomId: room.id });
+    }
     return;
   }
 }
@@ -369,9 +521,13 @@ function getVoiceStats() {
 
 function broadcastPresence() {
   const list = Array.from(users.values()).map((u) => ({ id: u.id, name: u.name, busy: Boolean(u.roomId) }));
-  const msg = JSON.stringify({ type: 'presence', users: list, voice: getVoiceStats() });
+
+  // Reliable for everything: presence is sent reliably but coalesced per-user so
+  // we don't build up an unbounded retry queue.
+  const base = { type: 'presence', users: list, voice: getVoiceStats() };
   for (const u of users.values()) {
-    if (u.ws.readyState === 1) u.ws.send(msg);
+    if (u.ws.readyState !== 1) continue;
+    send(u.ws, base, { coalesceKey: 'presence' });
   }
 }
 
@@ -436,7 +592,7 @@ function leaveRoom(user) {
 function broadcastChat(fromUser, text) {
   const atIso = new Date().toISOString();
   const id = makeMsgId();
-  const msg = JSON.stringify({
+  const base = {
     type: 'chat',
     id,
     atIso,
@@ -444,11 +600,12 @@ function broadcastChat(fromUser, text) {
     fromName: fromUser.name,
     text,
     private: false,
-  });
+    msgId: id,
+  };
 
   for (const u of users.values()) {
     if (!u.name) continue;
-    if (u.ws.readyState === 1) u.ws.send(msg);
+    sendReliableToUser(u, base);
 
     if (u.id !== fromUser.id) {
       void sendPushToUser(u.id, {
@@ -464,7 +621,7 @@ function broadcastChat(fromUser, text) {
 function broadcastSystem(text) {
   const atIso = new Date().toISOString();
   const id = makeMsgId();
-  const msg = JSON.stringify({
+  const base = {
     type: 'chat',
     id,
     atIso,
@@ -472,18 +629,19 @@ function broadcastSystem(text) {
     fromName: 'System',
     text,
     private: false,
-  });
+    msgId: id,
+  };
 
   for (const u of users.values()) {
     if (!u.name) continue;
-    if (u.ws.readyState === 1) u.ws.send(msg);
+    sendReliableToUser(u, base);
   }
 }
 
 function sendPrivateChat(fromUser, toUser, text) {
   const atIso = new Date().toISOString();
   const id = makeMsgId();
-  const msg = JSON.stringify({
+  const base = {
     type: 'chat',
     id,
     atIso,
@@ -493,10 +651,11 @@ function sendPrivateChat(fromUser, toUser, text) {
     toName: toUser.name,
     text,
     private: true,
-  });
+    msgId: id,
+  };
 
-  if (fromUser.ws.readyState === 1) fromUser.ws.send(msg);
-  if (toUser.ws.readyState === 1) toUser.ws.send(msg);
+  sendReliableToUser(fromUser, base);
+  sendReliableToUser(toUser, base);
 
   void sendPushToUser(toUser.id, {
     title: `${APP_NAME} private message`,
@@ -531,10 +690,7 @@ function parsePrivatePrefix(text) {
   return { toName, body };
 }
 
-function send(ws, obj) {
-  if (ws.readyState !== 1) return;
-  ws.send(JSON.stringify(obj));
-}
+// NOTE: send() is defined above (reliable-aware).
 
 function closeUser(userId) {
   const u = users.get(userId);
@@ -548,6 +704,7 @@ function closeUser(userId) {
   }
 
   users.delete(userId);
+  pendingReliable.delete(userId);
   pushSubscriptions.delete(userId);
   if (name && nameToId.get(name) === userId) nameToId.delete(name);
 
@@ -570,8 +727,21 @@ function rateLimit(user, nowMs) {
 
 wss.on('connection', (ws, req) => {
   const userId = makeId();
-  const user = { id: userId, name: null, ws, lastMsgAt: Date.now(), roomId: null, joinPendingRoomId: null, _rl: null };
+  const user = {
+    id: userId,
+    name: null,
+    ws,
+    lastMsgAt: Date.now(),
+    roomId: null,
+    joinPendingRoomId: null,
+    supportsAck: false,
+    _helloPayload: null,
+    _rl: null,
+  };
   users.set(userId, user);
+
+  // Attach for send(ws, ...) to find the corresponding user.
+  ws._lrcomUserId = userId;
 
   const clientIp = req?.socket?.remoteAddress ?? null;
   const turnConfig = makeTurnConfig();
@@ -583,14 +753,13 @@ wss.on('connection', (ws, req) => {
     ? 'TURN is configured for localhost; set LRCOM_TURN_HOST to your public domain/IP for Internet calls.'
     : null;
 
-  send(ws, { type: 'hello', id: userId, turn: turnConfig, https: true, clientIp, turnWarning, voice: getVoiceStats() });
+  user._helloPayload = { type: 'hello', id: userId, turn: turnConfig, https: true, clientIp, turnWarning, voice: getVoiceStats() };
+  send(ws, user._helloPayload);
 
   ws.on('message', (data) => {
     const now = Date.now();
-    if (!rateLimit(user, now)) {
-      send(ws, { type: 'error', code: 'RATE_LIMIT' });
-      return;
-    }
+    // Keep a last-seen timestamp to support presence health.
+    user.lastMsgAt = now;
 
     let msg;
     try {
@@ -605,17 +774,65 @@ wss.on('connection', (ws, req) => {
       return;
     }
 
+    const cMsgId = typeof msg.cMsgId === 'string' && msg.cMsgId ? msg.cMsgId : null;
+    if (cMsgId) {
+      const prev = getClientReceipt(user, cMsgId);
+      if (prev) {
+        send(ws, prev, { coalesceKey: `receipt:${cMsgId}` });
+        return;
+      }
+    }
+
+    if (!rateLimit(user, now)) {
+      send(ws, { type: 'error', code: 'RATE_LIMIT' });
+      if (cMsgId) sendClientReceipt(user, ws, cMsgId, false, 'RATE_LIMIT');
+      return;
+    }
+
     // Push subscription can arrive before a name is set.
     if (msg.type === 'pushSubscribe') {
       if (!PUSH_ENABLED) return;
       if (msg.subscription && typeof msg.subscription === 'object') {
         pushSubscriptions.set(userId, msg.subscription);
       }
+      if (cMsgId) sendClientReceipt(user, ws, cMsgId, true);
       return;
     }
 
     if (msg.type === 'pushUnsubscribe') {
       pushSubscriptions.delete(userId);
+      if (cMsgId) sendClientReceipt(user, ws, cMsgId, true);
+      return;
+    }
+
+    if (msg.type === 'clientHello') {
+      // Feature negotiation; safe to accept before name is set.
+      const f = msg.features && typeof msg.features === 'object' ? msg.features : null;
+      const ack = f && f.ack === true;
+      user.supportsAck = Boolean(ack);
+
+      // If ack support is enabled, re-send the hello payload as reliable so the
+      // client can recover it even if it missed the initial one-shot send.
+      if (user.supportsAck && user._helloPayload) {
+        send(ws, user._helloPayload, { coalesceKey: 'hello' });
+      }
+      if (cMsgId) sendClientReceipt(user, ws, cMsgId, true);
+      return;
+    }
+
+    if (msg.type === 'ack') {
+      // Ack for reliable messages; safe before name is set.
+      const msgId = typeof msg.msgId === 'string' ? msg.msgId : null;
+      if (msgId) ackReliable(userId, msgId);
+      if (cMsgId) sendClientReceipt(user, ws, cMsgId, true);
+      return;
+    }
+
+    if (msg.type === 'ping') {
+      // App-level ping to keep online status fresh.
+      // (We still rely on ws 'close' for definitive disconnect.)
+      send(ws, { type: 'pong', at: now });
+      if (cMsgId) sendClientReceipt(user, ws, cMsgId, true);
       return;
     }
 
@@ -623,11 +840,13 @@ wss.on('connection', (ws, req) => {
       const name = safeName(msg.name);
       if (!name) {
         send(ws, { type: 'nameResult', ok: false, reason: 'invalid' });
+        if (cMsgId) sendClientReceipt(user, ws, cMsgId, false, 'INVALID_NAME');
         return;
       }
       const existing = nameToId.get(name);
       if (existing && existing !== userId) {
         send(ws, { type: 'nameResult', ok: false, reason: 'taken' });
+        if (cMsgId) sendClientReceipt(user, ws, cMsgId, false, 'NAME_TAKEN');
         return;
       }
 
@@ -639,12 +858,14 @@ wss.on('connection', (ws, req) => {
       send(ws, { type: 'nameResult', ok: true, name });
       broadcastSystem(`${name} joined.`);
       broadcastPresence();
+      if (cMsgId) sendClientReceipt(user, ws, cMsgId, true);
       return;
     }
 
     // Require name for any other operations
     if (!user.name) {
       send(ws, { type: 'error', code: 'NO_NAME' });
+      if (cMsgId) sendClientReceipt(user, ws, cMsgId, false, 'NO_NAME');
       return;
     }
 
@@ -652,20 +873,24 @@ wss.on('connection', (ws, req) => {
       const to = typeof msg.to === 'string' ? msg.to : null;
       if (!to || !users.has(to)) {
         send(ws, { type: 'callStartResult', ok: false, reason: 'not_found' });
+        if (cMsgId) sendClientReceipt(user, ws, cMsgId, false, 'NOT_FOUND');
         return;
       }
       if (to === userId) {
         send(ws, { type: 'callStartResult', ok: false, reason: 'self' });
+        if (cMsgId) sendClientReceipt(user, ws, cMsgId, false, 'SELF');
         return;
       }
 
       const callee = users.get(to);
       if (!callee.name) {
         send(ws, { type: 'callStartResult', ok: false, reason: 'not_ready' });
+        if (cMsgId) sendClientReceipt(user, ws, cMsgId, false, 'NOT_READY');
         return;
       }
       if (callee.roomId) {
         send(ws, { type: 'callStartResult', ok: false, reason: 'busy' });
+        if (cMsgId) sendClientReceipt(user, ws, cMsgId, false, 'BUSY');
         return;
       }
 
@@ -680,7 +905,7 @@ wss.on('connection', (ws, req) => {
       user.roomId = rid;
       callee.roomId = rid;
 
-      send(callee.ws, { type: 'incomingCall', from: user.id, fromName: user.name, roomId: rid });
+      sendReliableToUser(callee, { type: 'incomingCall', from: user.id, fromName: user.name, roomId: rid });
 
       void sendPushToUser(callee.id, {
         title: 'Incoming call',
@@ -691,6 +916,7 @@ wss.on('connection', (ws, req) => {
       });
       send(ws, { type: 'callStartResult', ok: true });
       broadcastPresence();
+      if (cMsgId) sendClientReceipt(user, ws, cMsgId, true);
       return;
     }
 
@@ -698,30 +924,36 @@ wss.on('connection', (ws, req) => {
       const to = typeof msg.to === 'string' ? msg.to : null;
       if (!to || !users.has(to)) {
         send(ws, { type: 'callJoinResult', ok: false, reason: 'not_found' });
+        if (cMsgId) sendClientReceipt(user, ws, cMsgId, false, 'NOT_FOUND');
         return;
       }
       if (to === userId) {
         send(ws, { type: 'callJoinResult', ok: false, reason: 'self' });
+        if (cMsgId) sendClientReceipt(user, ws, cMsgId, false, 'SELF');
         return;
       }
       if (user.roomId) {
         send(ws, { type: 'callJoinResult', ok: false, reason: 'already_in_call' });
+        if (cMsgId) sendClientReceipt(user, ws, cMsgId, false, 'ALREADY_IN_CALL');
         return;
       }
       if (user.joinPendingRoomId) {
         send(ws, { type: 'callJoinResult', ok: false, reason: 'already_pending' });
+        if (cMsgId) sendClientReceipt(user, ws, cMsgId, false, 'ALREADY_PENDING');
         return;
       }
 
       const callee = users.get(to);
       if (!callee?.name) {
         send(ws, { type: 'callJoinResult', ok: false, reason: 'not_ready' });
+        if (cMsgId) sendClientReceipt(user, ws, cMsgId, false, 'NOT_READY');
         return;
       }
       const rid = callee.roomId;
       const room = getRoom(rid);
       if (!rid || !room) {
         send(ws, { type: 'callJoinResult', ok: false, reason: 'not_in_call' });
+        if (cMsgId) sendClientReceipt(user, ws, cMsgId, false, 'NOT_IN_CALL');
         return;
       }
 
@@ -734,6 +966,7 @@ wss.on('connection', (ws, req) => {
 
       send(ws, { type: 'callJoinPending', roomId: rid, toName: callee.name });
       pumpJoinQueue(room);
+      if (cMsgId) sendClientReceipt(user, ws, cMsgId, true);
       return;
     }
 
@@ -747,6 +980,7 @@ wss.on('connection', (ws, req) => {
       }
       user.joinPendingRoomId = null;
       send(ws, { type: 'callJoinResult', ok: false, reason: 'canceled' });
+      if (cMsgId) sendClientReceipt(user, ws, cMsgId, true);
       return;
     }
 
@@ -768,6 +1002,7 @@ wss.on('connection', (ws, req) => {
       if (!requester || !requester.name) {
         room.joinActive = null;
         pumpJoinQueue(room);
+        if (cMsgId) sendClientReceipt(user, ws, cMsgId, false, 'NOT_FOUND');
         return;
       }
 
@@ -776,6 +1011,7 @@ wss.on('connection', (ws, req) => {
         if (requester.ws.readyState === 1) send(requester.ws, { type: 'callJoinResult', ok: false, reason: 'rejected' });
         room.joinActive = null;
         pumpJoinQueue(room);
+        if (cMsgId) sendClientReceipt(user, ws, cMsgId, true);
         return;
       }
 
@@ -789,7 +1025,7 @@ wss.on('connection', (ws, req) => {
         if (memberId === requester.id) continue;
         const m = users.get(memberId);
         if (!m) continue;
-        send(m.ws, { type: 'roomPeerJoined', roomId: rid, peer });
+        sendReliableToUser(m, { type: 'roomPeerJoined', roomId: rid, peer });
       }
 
       const peers = Array.from(room.members)
@@ -800,11 +1036,12 @@ wss.on('connection', (ws, req) => {
         })
         .filter(Boolean);
 
-      send(requester.ws, { type: 'roomPeers', roomId: rid, peers });
+      sendReliableToUser(requester, { type: 'roomPeers', roomId: rid, peers });
       broadcastPresence();
 
       room.joinActive = null;
       pumpJoinQueue(room);
+      if (cMsgId) sendClientReceipt(user, ws, cMsgId, true);
       return;
     }
 
@@ -821,6 +1058,7 @@ wss.on('connection', (ws, req) => {
         user.roomId = null;
       }
       broadcastPresence();
+      if (cMsgId) sendClientReceipt(user, ws, cMsgId, true);
       return;
     }
 
@@ -831,12 +1069,14 @@ wss.on('connection', (ws, req) => {
       if (!caller) {
         user.roomId = null;
         broadcastPresence();
+        if (cMsgId) sendClientReceipt(user, ws, cMsgId, false, 'NOT_FOUND');
         return;
       }
 
       if (!rid || caller.roomId !== rid || user.roomId !== rid) {
         user.roomId = null;
         broadcastPresence();
+        if (cMsgId) sendClientReceipt(user, ws, cMsgId, false, 'ROOM_MISMATCH');
         return;
       }
 
@@ -844,6 +1084,7 @@ wss.on('connection', (ws, req) => {
       if (!room) {
         user.roomId = null;
         broadcastPresence();
+        if (cMsgId) sendClientReceipt(user, ws, cMsgId, false, 'ROOM_MISSING');
         return;
       }
 
@@ -853,7 +1094,7 @@ wss.on('connection', (ws, req) => {
         if (memberId === user.id) continue;
         const m = users.get(memberId);
         if (!m) continue;
-        send(m.ws, { type: 'roomPeerJoined', roomId: rid, peer });
+        sendReliableToUser(m, { type: 'roomPeerJoined', roomId: rid, peer });
       }
 
       // Send the joiner a list of existing members to prepare for offers
@@ -865,8 +1106,9 @@ wss.on('connection', (ws, req) => {
         })
         .filter(Boolean);
 
-      send(user.ws, { type: 'roomPeers', roomId: rid, peers });
+      sendReliableToUser(user, { type: 'roomPeers', roomId: rid, peers });
 
+      if (cMsgId) sendClientReceipt(user, ws, cMsgId, true);
       return;
     }
 
@@ -880,13 +1122,17 @@ wss.on('connection', (ws, req) => {
       if (!peer) return;
       if (!user.roomId || user.roomId !== peer.roomId) return;
 
-      send(peer.ws, { type: 'signal', from: user.id, fromName: user.name, payload });
+      // WebRTC signaling is intentionally NOT made reliable to avoid duplicate
+      // offers/candidates causing side effects.
+      send(peer.ws, { type: 'signal', from: user.id, fromName: user.name, payload }, { reliable: false });
+      if (cMsgId) sendClientReceipt(user, ws, cMsgId, true);
       return;
     }
 
     if (msg.type === 'callHangup') {
       leaveRoom(user);
       broadcastPresence();
+      if (cMsgId) sendClientReceipt(user, ws, cMsgId, true);
       return;
     }
 
@@ -894,6 +1140,7 @@ wss.on('connection', (ws, req) => {
       const raw = safeChatText(msg.text);
       if (!raw) {
         send(ws, { type: 'error', code: 'BAD_CHAT' });
+        if (cMsgId) sendClientReceipt(user, ws, cMsgId, false, 'BAD_CHAT');
         return;
       }
 
@@ -903,21 +1150,26 @@ wss.on('connection', (ws, req) => {
         const toUser = toId ? users.get(toId) : null;
         if (!toUser || !toUser.name) {
           send(ws, { type: 'error', code: 'PM_NOT_FOUND' });
+          if (cMsgId) sendClientReceipt(user, ws, cMsgId, false, 'PM_NOT_FOUND');
           return;
         }
         if (toUser.id === user.id) {
           send(ws, { type: 'error', code: 'PM_SELF' });
+          if (cMsgId) sendClientReceipt(user, ws, cMsgId, false, 'PM_SELF');
           return;
         }
         sendPrivateChat(user, toUser, raw);
+        if (cMsgId) sendClientReceipt(user, ws, cMsgId, true);
         return;
       }
 
       broadcastChat(user, raw);
+      if (cMsgId) sendClientReceipt(user, ws, cMsgId, true);
       return;
     }
 
     send(ws, { type: 'error', code: 'UNKNOWN_TYPE' });
+    if (cMsgId) sendClientReceipt(user, ws, cMsgId, false, 'UNKNOWN_TYPE');
   });
 
   ws.on('close', () => {
@@ -928,6 +1180,43 @@ wss.on('connection', (ws, req) => {
     closeUser(userId);
   });
 });
+
+// Periodic presence refresh (RAM-only, low overhead).
+setInterval(() => {
+  try {
+    broadcastPresence();
+  } catch {
+    // ignore
+  }
+}, PRESENCE_TICK_MS);
+
+// Terminate stale sockets (e.g. mobile network drop without close event).
+setInterval(() => {
+  const now = Date.now();
+  for (const u of users.values()) {
+    try {
+      if (!u?.ws || u.ws.readyState !== 1) continue;
+      const last = typeof u.lastMsgAt === 'number' ? u.lastMsgAt : now;
+      if (now - last > STALE_WS_MS) {
+        if (typeof u.ws.terminate === 'function') u.ws.terminate();
+        else u.ws.close();
+      }
+    } catch {
+      // ignore
+    }
+  }
+}, Math.min(10000, Math.max(1000, Math.floor(STALE_WS_MS / 3))));
+
+// Frequent pump for reliable retries.
+setInterval(() => {
+  try {
+    for (const u of users.values()) {
+      flushReliableForUser(u);
+    }
+  } catch {
+    // ignore
+  }
+}, RELIABLE_PUMP_MS);
 
 server.listen(PORT, HOST, () => {
   // Intentionally minimal logs
