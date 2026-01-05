@@ -81,6 +81,42 @@ export const useCallStore = defineStore('call', () => {
   let ringtoneGain: GainNode | null = null
   let ringtoneInterval: number | null = null
 
+  function getAudioContextCtor(): typeof AudioContext | null {
+    return (window.AudioContext || (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext) ?? null
+  }
+
+  function primeAudio() {
+    // Mobile browsers (esp. iOS Safari) require a user gesture before audio can play.
+    // Call this from a click/tap handler (e.g. Join button).
+    try {
+      const Ctor = getAudioContextCtor()
+      if (!Ctor) return
+      if (!ringtoneCtx) ringtoneCtx = new Ctor()
+
+      // Resume if suspended (may still require gesture).
+      void ringtoneCtx.resume?.().catch(() => {})
+
+      // Create a short-lived silent node so the context is actually "used".
+      const osc = ringtoneCtx.createOscillator()
+      const gain = ringtoneCtx.createGain()
+      gain.gain.value = 0.0
+      osc.connect(gain)
+      gain.connect(ringtoneCtx.destination)
+      osc.start()
+      osc.stop(ringtoneCtx.currentTime + 0.02)
+      osc.onended = () => {
+        try {
+          osc.disconnect()
+          gain.disconnect()
+        } catch {
+          // ignore
+        }
+      }
+    } catch {
+      // ignore
+    }
+  }
+
   const inCall = computed(() => Boolean(roomId.value))
   const peers = computed(() => Array.from(peerNames.entries()).map(([id, name]) => ({ id, name })))
 
@@ -115,7 +151,13 @@ export const useCallStore = defineStore('call', () => {
   function startRingtone() {
     try {
       stopRingtone()
-      ringtoneCtx = new (window.AudioContext || (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext!)()
+      const Ctor = getAudioContextCtor()
+      if (!Ctor) return
+      ringtoneCtx = new Ctor()
+
+      // If the context is suspended (common on mobile), attempt resume.
+      void ringtoneCtx.resume?.().catch(() => {})
+
       ringtoneOsc = ringtoneCtx.createOscillator()
       ringtoneGain = ringtoneCtx.createGain()
       ringtoneOsc.type = 'sine'
@@ -622,5 +664,6 @@ export const useCallStore = defineStore('call', () => {
     acceptIncoming,
     rejectIncoming,
     hangup,
+    primeAudio,
   }
 })
