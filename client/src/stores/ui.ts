@@ -3,17 +3,15 @@ import { computed, ref, watch } from 'vue'
 import { i18n } from '../i18n'
 
 export const useUiStore = defineStore('ui', () => {
-  const settingsOpen = ref(false)
+  const view = ref<'contacts' | 'chat' | 'settings'>('contacts')
 
   const aboutOpen = ref(false)
-
-  const sidebarOpen = ref(false)
 
   const themeMode = ref<'system' | 'dark' | 'light'>('system')
 
   const replyToId = ref<string | null>(null)
 
-  // Chat selection: null means "Group chat", otherwise the peer's display name.
+  // Chat selection: null means "Public chat", otherwise the peer's display name.
   const activeChatName = ref<string | null>(null)
   const unreadByChat = ref<Record<string, number>>({})
 
@@ -22,6 +20,11 @@ export const useUiStore = defineStore('ui', () => {
     void i18n.global.locale.value
     return activeChatName.value ?? String(i18n.global.t('sidebar.groupChat'))
   })
+
+  function isViewingChat(name: string | null) {
+    if (view.value !== 'chat') return false
+    return (activeChatName.value ?? null) === (name ?? null)
+  }
 
   function chatKey(name: string | null) {
     return name ? `u:${name}` : 'group'
@@ -45,12 +48,19 @@ export const useUiStore = defineStore('ui', () => {
 
   function openChat(name: string | null) {
     activeChatName.value = name
+    view.value = 'chat'
     clearUnread(name)
+  }
+
+  function goHome() {
+    view.value = 'contacts'
+    clearReply()
   }
 
   function resetChats() {
     activeChatName.value = null
     unreadByChat.value = {}
+    view.value = 'contacts'
   }
 
   const themeLabel = computed(() => {
@@ -90,15 +100,7 @@ export const useUiStore = defineStore('ui', () => {
   }
 
   function openSettings() {
-    settingsOpen.value = true
-  }
-
-  function closeSettings() {
-    settingsOpen.value = false
-  }
-
-  function toggleSettings() {
-    settingsOpen.value = !settingsOpen.value
+    view.value = 'settings'
   }
 
   function openAbout() {
@@ -107,18 +109,6 @@ export const useUiStore = defineStore('ui', () => {
 
   function closeAbout() {
     aboutOpen.value = false
-  }
-
-  function openSidebar() {
-    sidebarOpen.value = true
-  }
-
-  function closeSidebar() {
-    sidebarOpen.value = false
-  }
-
-  function toggleSidebar() {
-    sidebarOpen.value = !sidebarOpen.value
   }
 
   function setReplyTo(id: string) {
@@ -145,28 +135,24 @@ export const useUiStore = defineStore('ui', () => {
   )
 
   return {
-    settingsOpen,
+    view,
     aboutOpen,
-    sidebarOpen,
     themeMode,
     themeLabel,
     cycleTheme,
     replyToId,
     activeChatName,
     activeChatLabel,
+    isViewingChat,
     openChat,
+    goHome,
     resetChats,
     getUnread,
     bumpUnread,
     clearUnread,
     openSettings,
-    closeSettings,
-    toggleSettings,
     openAbout,
     closeAbout,
-    openSidebar,
-    closeSidebar,
-    toggleSidebar,
     setReplyTo,
     clearReply,
   }

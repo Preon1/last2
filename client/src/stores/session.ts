@@ -255,7 +255,7 @@ export const useSessionStore = defineStore('session', () => {
           if (myName.value && fromName === myName.value) return
 
           if (!isPrivate) {
-            if (ui.activeChatName !== null) ui.bumpUnread(null)
+            if (!ui.isViewingChat(null)) ui.bumpUnread(null)
             return
           }
 
@@ -265,7 +265,7 @@ export const useSessionStore = defineStore('session', () => {
             : fromName
 
           if (!other) return
-          if (ui.activeChatName !== other) ui.bumpUnread(other)
+          if (!ui.isViewingChat(other)) ui.bumpUnread(other)
         } catch {
           // ignore
         }

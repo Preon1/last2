@@ -39,6 +39,8 @@ export const messages = {
   en: {
     common: {
       about: 'About',
+      back: 'Back',
+      chat: 'Chat',
       close: 'Close',
       cancel: 'Cancel',
       proceed: 'Proceed',
@@ -76,7 +78,7 @@ export const messages = {
       youLabel: 'You:',
     },
     sidebar: {
-      groupChat: 'Group chat',
+      groupChat: 'Public chat',
       noOneOnline: 'No one online right now.',
     },
     chat: {
@@ -156,6 +158,8 @@ export const messages = {
   nl: {
     common: {
       about: 'Over',
+      back: 'Terug',
+      chat: 'Chat',
       close: 'Sluiten',
       cancel: 'Annuleren',
       proceed: 'Doorgaan',
@@ -193,7 +197,7 @@ export const messages = {
       youLabel: 'Jij:',
     },
     sidebar: {
-      groupChat: 'Groepschat',
+      groupChat: 'Publieke chat',
       noOneOnline: 'Er is momenteel niemand online.',
     },
     chat: {
@@ -273,6 +277,8 @@ export const messages = {
   fr: {
     common: {
       about: 'À propos',
+      back: 'Retour',
+      chat: 'Chat',
       close: 'Fermer',
       cancel: 'Annuler',
       proceed: 'Continuer',
@@ -310,7 +316,7 @@ export const messages = {
       youLabel: 'Vous :',
     },
     sidebar: {
-      groupChat: 'Chat de groupe',
+      groupChat: 'Chat public',
       noOneOnline: "Personne n’est en ligne pour le moment.",
     },
     chat: {
@@ -390,6 +396,8 @@ export const messages = {
   de: {
     common: {
       about: 'Über',
+      back: 'Zurück',
+      chat: 'Chat',
       close: 'Schließen',
       cancel: 'Abbrechen',
       proceed: 'Fortfahren',
@@ -427,7 +435,7 @@ export const messages = {
       youLabel: 'Du:',
     },
     sidebar: {
-      groupChat: 'Gruppenchat',
+      groupChat: 'Öffentlicher Chat',
       noOneOnline: 'Im Moment ist niemand online.',
     },
     chat: {
@@ -507,6 +515,8 @@ export const messages = {
   ru: {
     common: {
       about: 'О приложении',
+      back: 'Назад',
+      chat: 'Чат',
       close: 'Закрыть',
       cancel: 'Отмена',
       proceed: 'Продолжить',
@@ -544,7 +554,7 @@ export const messages = {
       youLabel: 'Вы:',
     },
     sidebar: {
-      groupChat: 'Групповой чат',
+      groupChat: 'Публичный чат',
       noOneOnline: 'В сети только вы.',
     },
     chat: {

@@ -36,7 +36,7 @@ function onRejectJoin() {
 </script>
 
 <template>
-  <div class="card chat-top">
+  <div class="card call-blob">
     <div class="chat-call">
       <div class="call-title">{{ callLabel }}</div>
 

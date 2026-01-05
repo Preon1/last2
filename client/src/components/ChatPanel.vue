@@ -13,39 +13,13 @@ const call = useCallStore()
 
 const { t } = useI18n()
 
-const { chat, users } = storeToRefs(session)
-const { replyToId, activeChatName, activeChatLabel } = storeToRefs(ui)
-const { inCall, outgoingPending, pendingIncomingFrom, joinPending, joinConfirmToId, joinConfirmToName } = storeToRefs(call)
+const { chat } = storeToRefs(session)
+const { replyToId, activeChatName } = storeToRefs(ui)
+const { inCall, outgoingPending, pendingIncomingFrom, joinPending } = storeToRefs(call)
 
 const showCallPanel = computed(() => Boolean(pendingIncomingFrom.value) || outgoingPending.value || inCall.value || joinPending.value)
 
-const activePeer = computed(() => {
-  const name = activeChatName.value
-  if (!name) return null
-  return users.value.find((u) => u.name === name) ?? null
-})
-
-const canCallActivePeer = computed(() => {
-  const peer = activePeer.value
-  if (!peer) return false
-  if (!peer.id || !peer.name) return false
-  // Don't allow starting a new call while any call state is active.
-  if (pendingIncomingFrom.value) return false
-  if (outgoingPending.value) return false
-  if (inCall.value) return false
-  if (joinPending.value) return false
-  return true
-})
-
-function onCallActivePeer() {
-  const peer = activePeer.value
-  if (!peer || !peer.id || !peer.name) return
-  if (peer.busy) {
-    call.openJoinConfirm(peer.id, peer.name)
-    return
-  }
-  void call.startCall(peer.id, peer.name)
-}
+// Call button + join confirm are handled by ChatTopBar.
 
 const chatInput = ref('')
 const chatMessagesEl = ref<HTMLElement | null>(null)
@@ -105,30 +79,47 @@ function onSend() {
   chatInput.value = ''
   if (replyToId.value) ui.clearReply()
 
-  queueMicrotask(() => autoGrowChatInput())
+  queueMicrotask(() => autoGrowChatInput(true))
 }
 
 function isMobileTextEntry() {
   return (navigator.maxTouchPoints ?? 0) > 0 || (window.matchMedia && window.matchMedia('(pointer: coarse)').matches)
 }
 
-function autoGrowChatInput() {
+const messagesContainerPB = ref(53)
+
+watchEffect(() => {
+  const messagesContainer = chatMessagesEl.value
+  if (messagesContainer) {
+    messagesContainerPB.value = Number.parseFloat(window.getComputedStyle(messagesContainer).paddingBottom)
+    || messagesContainerPB.value
+  }
+})
+
+function autoGrowChatInput(reset = false) {
   const el = chatInputEl.value
   if (!el) return
-
-  el.style.height = 'auto'
 
   const cs = window.getComputedStyle(el)
   const lineHeight = Number.parseFloat(cs.lineHeight) || 20
   const paddingTop = Number.parseFloat(cs.paddingTop) || 0
   const paddingBottom = Number.parseFloat(cs.paddingBottom) || 0
-  const borderTop = Number.parseFloat(cs.borderTopWidth) || 0
-  const borderBottom = Number.parseFloat(cs.borderBottomWidth) || 0
 
-  const maxHeight = lineHeight * 8 + paddingTop + paddingBottom + borderTop + borderBottom
-  const target = Math.min(el.scrollHeight, maxHeight)
+  const basicHeight = Math.ceil(lineHeight + paddingTop + paddingBottom + 2)
+  const maxHeight = lineHeight * 8 + paddingTop + paddingBottom + 2
+  let target = Math.min(el.scrollHeight + 2, maxHeight)
+
+  if (reset) {
+    target = basicHeight
+  }
+
   el.style.height = `${target}px`
-  el.style.overflowY = el.scrollHeight > maxHeight ? 'auto' : 'hidden'
+  el.style.overflowY = el.scrollHeight + 2 > maxHeight ? 'auto' : 'hidden'
+
+  // increase padding bottom of messages block to correspond with growth of textarea
+  const messagesContainer = chatMessagesEl.value
+  if (!messagesContainer) return
+  messagesContainer.style.paddingBottom = `${messagesContainerPB.value + target - basicHeight}px`
 }
 
 function onChatKeydown(e: KeyboardEvent) {
@@ -181,40 +172,6 @@ function onClickReplyTarget(id: string) {
   <section class="chat">
     <CallPanel v-if="showCallPanel" />
 
-    <div class="chat-header">
-      <div class="chat-header-title">{{ activeChatLabel }}</div>
-      <button
-        v-if="activeChatName"
-        class="secondary icon-only"
-        type="button"
-        :aria-label="String(t('chat.callAria'))"
-        :disabled="!canCallActivePeer"
-        @click="onCallActivePeer"
-      >
-        <svg class="icon" aria-hidden="true" focusable="false"><use xlink:href="/icons.svg#call"></use></svg>
-      </button>
-    </div>
-
-    <div
-      v-if="joinConfirmToId"
-      class="modal"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="joinConfirmTitle"
-      @click="(e) => { if (e.target === e.currentTarget) call.cancelJoinConfirm() }"
-    >
-      <div class="modal-card">
-        <div class="modal-title" id="joinConfirmTitle">{{ t('chat.joinOngoingTitle') }}</div>
-        <div class="muted" style="margin-bottom: 12px;">
-          {{ joinConfirmToName ? t('chat.joinOngoingBodyNamed', { name: joinConfirmToName }) : t('chat.joinOngoingBody') }}
-        </div>
-        <div class="modal-actions">
-          <button class="secondary" type="button" @click="call.cancelJoinConfirm">{{ t('common.cancel') }}</button>
-          <button type="button" @click="call.confirmJoinAttempt">{{ t('common.proceed') }}</button>
-        </div>
-      </div>
-    </div>
-
     <div ref="chatMessagesEl" class="chat-messages" aria-live="polite">
       <div
         v-for="(m, i) in renderedChat"
@@ -260,12 +217,12 @@ function onClickReplyTarget(id: string) {
         autocomplete="off"
         :placeholder="String(t('chat.typeMessage'))"
         @keydown="onChatKeydown"
-        @input="autoGrowChatInput"
-      ></textarea>
-      <button class="icon-only" type="button" :aria-label="String(t('chat.sendAria'))" @click="onSend">
-        <svg class="icon" aria-hidden="true" focusable="false"><use xlink:href="/icons.svg#send"></use></svg>
-      </button>
-    </div>
+        @input="autoGrowChatInput()"
+        ></textarea>
+        <button class="icon-only chat-send" type="button" :aria-label="String(t('chat.sendAria'))" @click="onSend">
+          <svg class="icon" aria-hidden="true" focusable="false"><use xlink:href="/icons.svg#send"></use></svg>
+        </button>
+      </div>
 
   </section>
 </template>

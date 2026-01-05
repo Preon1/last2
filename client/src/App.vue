@@ -6,7 +6,6 @@ import { useNotificationsStore } from './stores/notifications'
 import SetupScreen from './components/SetupScreen.vue'
 import AppShell from './components/AppShell.vue'
 import AboutModal from './components/AboutModal.vue'
-import SettingsModal from './components/SettingsModal.vue'
 import { useWakeLock } from './utils/wakeLock'
 import { useBeforeUnloadConfirm } from './utils/beforeUnloadConfirm'
 
@@ -30,6 +29,5 @@ watchEffect(() => {
     <AppShell v-else />
 
     <AboutModal />
-    <SettingsModal />
   </main>
 </template>

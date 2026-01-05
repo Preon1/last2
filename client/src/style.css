@@ -17,6 +17,12 @@
   --secondary-text: var(--brand-dark);
   --danger: #a30012;
 
+  /* Frosted glass surfaces (light) */
+  --glass-bg: rgba(255, 255, 255, 0.72);
+  --glass-border: rgba(255, 255, 255, 0.55);
+  --glass-shadow: 0 16px 38px rgba(16, 24, 40, 0.10);
+  --glass-blur: 14px;
+
   /* Background spots (light) */
   --spot-1: rgba(0, 113, 183, 0.12);
   --spot-2: rgba(34, 67, 93, 0.10);
@@ -38,6 +44,12 @@
     --button-text: #e7ecf4;
     --secondary-text: var(--text);
     --danger: #d84a5b;
+
+    /* Frosted glass surfaces (dark) */
+    --glass-bg: rgba(18, 24, 38, 0.72);
+    --glass-border: rgba(231, 236, 244, 0.10);
+    --glass-shadow: 0 18px 44px rgba(0, 0, 0, 0.32);
+    --glass-blur: 14px;
 
     /* Background spots (dark) */
     --spot-1: rgba(0, 113, 183, 0.14);
@@ -63,6 +75,11 @@ html[data-theme="light"] {
   --secondary-text: var(--brand-dark);
   --danger: #a30012;
 
+  --glass-bg: rgba(255, 255, 255, 0.72);
+  --glass-border: rgba(255, 255, 255, 0.55);
+  --glass-shadow: 0 16px 38px rgba(16, 24, 40, 0.10);
+  --glass-blur: 14px;
+
   --spot-1: rgba(0, 113, 183, 0.12);
   --spot-2: rgba(34, 67, 93, 0.10);
   --spot-3: rgba(0, 113, 183, 0.08);
@@ -85,10 +102,19 @@ html[data-theme="dark"] {
   --secondary-text: var(--text);
   --danger: #d84a5b;
 
+  --glass-bg: rgba(18, 24, 38, 0.72);
+  --glass-border: rgba(231, 236, 244, 0.10);
+  --glass-shadow: 0 18px 44px rgba(0, 0, 0, 0.32);
+  --glass-blur: 14px;
+
   --spot-1: rgba(0, 113, 183, 0.14);
   --spot-2: rgba(34, 67, 93, 0.12);
   --spot-3: rgba(0, 113, 183, 0.10);
   --spot-4: rgba(34, 67, 93, 0.08);
+}
+
+*{
+  box-sizing: border-box;
 }
 
 html, body {
@@ -112,13 +138,11 @@ body {
 .logo {
   width: 30px;
   height: 30px;
-  border-radius: 8px;
 }
 
 .logo-lg {
   width: 46px;
   height: 46px;
-  border-radius: 10px;
 }
 
 .setup-header {
@@ -179,8 +203,11 @@ button.join {
 }
 
 .card {
-  background: var(--card-bg);
-  border: 1px solid var(--border);
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--glass-shadow);
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
   border-radius: 12px;
   padding: 16px;
   margin-bottom: 12px;
@@ -207,11 +234,12 @@ input,
 textarea {
   flex: 1;
   padding: 10px 12px;
-  border-radius: 10px;
+  border-radius: 20px;
   border: 1px solid var(--input-border);
   outline: none;
-  background: var(--card-bg);
+  background: var(--glass-bg);
   color: var(--text);
+  height: auto;
 }
 
 textarea {
@@ -225,11 +253,16 @@ button {
   border: 1px solid var(--button-bg);
   background: var(--button-bg);
   color: var(--button-text);
-  border-radius: 10px;
+  border-radius: 50px;
   cursor: pointer;
   display: inline-flex;
   align-items: center;
   justify-content: center;
+}
+
+.chat-send{
+  width: 45px;
+  height: 35px;
 }
 
 .icon {
@@ -250,9 +283,12 @@ button.icon-only .icon {
 }
 
 button.secondary {
-  background: var(--card-bg);
+  background: var(--glass-bg);
   color: var(--secondary-text);
-  border-color: var(--border);
+  border-color: var(--glass-border);
+  box-shadow: var(--glass-shadow);
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
 }
 
 .text-link {
@@ -365,12 +401,26 @@ button:disabled {
 }
 
 .chat-messages {
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  padding: 10px;
-  background: var(--surface);
-  max-height: 260px;
-  overflow: auto;
+  border: 0;
+  border-radius: 0;
+  padding-left: 12px;
+  padding-right: 12px;
+  background: transparent;
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-width: none;
+  scrollbar-color: rgba(0, 0, 0, 0) rgba(0, 0, 0, 0);
+  height: auto;
+  max-height: 100vh;
+  max-height: 100dvh;
+  padding-bottom: 53px;
+}
+
+@media(min-width:768px){
+  .chat-messages {
+    scrollbar-width: thin;
+    scrollbar-color: initial;
+  }
 }
 
 .chat-hidden {
@@ -378,6 +428,7 @@ button:disabled {
 }
 
 .chat-line {
+  flex: 0 0 auto;
   padding: 6px 2px;
   border-bottom: 1px solid var(--border);
   position: relative;
@@ -484,8 +535,11 @@ button:disabled {
 
 .setup-card {
   width: min(80vw, 560px);
-  background: var(--card-bg);
-  border: 1px solid var(--border);
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--glass-shadow);
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
   border-radius: 12px;
   padding: 18px;
 }
@@ -504,8 +558,11 @@ button:disabled {
   gap: 12px;
   align-items: center;
   padding: 10px 12px;
-  background: var(--card-bg);
-  border-bottom: 1px solid var(--border);
+  background: var(--glass-bg);
+  border-bottom: 1px solid var(--glass-border);
+  box-shadow: var(--glass-shadow);
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
 }
 
 .header-left {
@@ -559,57 +616,164 @@ button:disabled {
   display: flex;
   min-height: 0;
   position: relative;
+  padding: 14px;
 }
 
-.sidebar {
-  background: var(--card-bg);
-  padding: 12px;
+.app.no-header .content {
+  padding: 0;
+}
+
+.page {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  display: flex;
+}
+
+.page-inner {
+  width: 100%;
+  padding: 14px;
+  min-height: 0;
   display: flex;
   flex-direction: column;
-  width: min(320px, 85vw);
-  height: calc( 100vh - 87px );
-  height: calc( 100dvh - 87px );
-  border-right: 1px solid var(--border);
+  flex: 1;
+  overflow: auto;
+  scrollbar-width: thin;
 }
 
-.overlay {
+.page-panel {
+  width: 100%;
+  margin: 0;
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  border-radius: 0;
+  padding: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.page-title {
+  font-weight: 800;
+  margin-bottom: 12px;
+}
+
+.contacts {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  overflow: auto;
+  min-height: 0;
+  scrollbar-width: thin;
+}
+
+.contact-row {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 12px;
+  border: 1px solid var(--glass-border);
+  background: var(--glass-bg);
+  color: var(--secondary-text);
+  box-shadow: var(--glass-shadow);
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+}
+
+.contact-row.active {
+  border-color: var(--border);
+}
+
+.contact-row .name {
+  font-weight: 800;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.contact-row-right {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.nav-back {
   position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.55);
-  z-index: 55;
+  top: 12px;
+  left: 12px;
+  z-index: 90;
 }
 
-.mobile-only {
-  display: none;
+.chat-topbar {
+  position: fixed;
+  top: 12px;
+  left: 60px;
+  right: 12px;
+  z-index: 90;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--glass-shadow);
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+  border-radius: 50px;
 }
 
-@media (max-width: 900px) {
-  .header {
-    grid-template-columns: 1fr 1fr;
-  }
+.chat-topbar-left {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
 
-  .mobile-only {
-    display: inline-flex;
-  }
+.chat-topbar-title {
+  font-weight: 800;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 
-  .sidebar {
-    position: fixed;
-    bottom: 0;
-    left: 0;
-    z-index: 60;
-    border-radius: 0 12px 0 0;
-    border-right: none;
-    transform: translateX(-110%);
-    transition: transform 180ms ease;
-  }
+.status-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  border: 1px solid var(--glass-border);
+  flex: 0 0 auto;
+}
 
-  .sidebar.open {
-    transform: translateX(0);
-  }
+.status-dot.online {
+  background: color-mix(in srgb, var(--brand-light) 70%, transparent);
+}
 
-  .content {
-    padding-left: 0;
-  }
+.status-dot.offline {
+  background: color-mix(in srgb, var(--danger) 70%, transparent);
+}
+
+.chat-top-fade {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 130px;
+  z-index: 80;
+  pointer-events: none;
+  background: linear-gradient(
+    to bottom,
+    color-mix(in srgb, var(--text) 22%, transparent),
+    transparent
+  );
 }
 
 
@@ -620,8 +784,9 @@ button:disabled {
 .settings-actions {
   margin-top: 12px;
   display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 14px;
 }
 
 .sidebar-title {
@@ -630,11 +795,18 @@ button:disabled {
 
 .chat {
   flex: 1;
+  overflow: hidden;
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  border-radius: 0;
   display: flex;
   flex-direction: column;
-  padding: 12px;
-  min-width: 0;
-  min-height: 0;
+  flex-wrap: nowrap;
+  align-items: stretch;
+  justify-content: flex-end;
 }
 
 .chat-header {
@@ -654,6 +826,14 @@ button:disabled {
 
 .chat-top {
   padding: 12px;
+}
+
+.call-blob {
+  position: fixed;
+  top: 62px;
+  left: 12px;
+  right: 12px;
+  z-index: 88;
 }
 
 .chat-call {
@@ -688,22 +868,23 @@ button:disabled {
   white-space: nowrap;
 }
 
-.chat-messages {
-  flex: 1;
-  max-height: none;
-}
-
 .chat-input {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  height: auto;
   display: flex;
   gap: 12px;
   align-items: flex-end;
-  margin-top: 12px;
+  padding: 12px;
+  box-sizing: border-box;
 }
 
 .chat-input textarea {
   padding: 8px 12px;
   line-height: 1.25;
-  min-height: 38px;
+  min-height: 1em;
 }
 
 .modal {
@@ -718,8 +899,11 @@ button:disabled {
 
 .modal-card {
   width: 100%;
-  background: var(--card-bg);
-  border: 1px solid var(--border);
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--glass-shadow);
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
   border-radius: 12px;
   padding: 14px;
   height: auto;
@@ -753,7 +937,15 @@ button:disabled {
   align-items: center;
   gap: 10px;
   padding: 10px 12px;
-  border: 1px solid var(--border);
+  border: 1px solid var(--glass-border);
   border-radius: 10px;
-  background: var(--surface);
+  background: var(--glass-bg);
+  box-shadow: var(--glass-shadow);
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+}
+
+
+.headergap{
+  padding-top: 55px;
 }
