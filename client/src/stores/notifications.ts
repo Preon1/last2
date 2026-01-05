@@ -43,14 +43,10 @@ export const useNotificationsStore = defineStore('notifications', () => {
     if (!session.connected) return
 
     // If already granted, just try enabling push silently.
+    // Do NOT request permission here: browsers (esp. mobile) often require a user gesture,
+    // and auto-prompts can feel spammy.
     if (permission.value === 'granted') {
       await tryEnableWebPushForSocket(session.send)
-      return
-    }
-
-    // Best-effort: browsers may block this without a user gesture.
-    if (permission.value === 'default') {
-      await requestPermissionAndEnable()
     }
   }
 

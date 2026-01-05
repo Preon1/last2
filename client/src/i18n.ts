@@ -3,8 +3,6 @@ import { createI18n } from 'vue-i18n'
 export const supportedLocales = ['en', 'nl', 'fr', 'de', 'ru'] as const
 export type SupportedLocale = (typeof supportedLocales)[number]
 
-const STORAGE_KEY = 'lrcom-locale'
-
 function normalizeLocale(raw: string | null | undefined): SupportedLocale | null {
   const s = (raw ?? '').trim().toLowerCase()
   if (!s) return null
@@ -20,13 +18,6 @@ function normalizeLocale(raw: string | null | undefined): SupportedLocale | null
 }
 
 function detectInitialLocale(): SupportedLocale {
-  try {
-    const saved = normalizeLocale(localStorage.getItem(STORAGE_KEY))
-    if (saved) return saved
-  } catch {
-    // ignore
-  }
-
   const nav =
     normalizeLocale(navigator.language) ??
     normalizeLocale(Array.isArray(navigator.languages) ? navigator.languages[0] : null) ??
@@ -80,6 +71,22 @@ export const messages = {
     settings: {
       title: 'Settings',
       youLabel: 'You:',
+    },
+    notifications: {
+      settingsLabel: 'Notifications:',
+      settingsHint: 'Enable notifications to get call/message alerts when the app is in background.',
+      promptTitle: 'Enable notifications?',
+      promptBody: 'Enable notifications to receive call and message alerts on your phone.',
+      deniedBody: 'Notifications are blocked in your browser settings for this site.',
+      enabledBody: 'Notifications are enabled.',
+      unsupportedBody: 'Notifications are not supported in this browser.',
+      enable: 'Enable notifications',
+      notNow: 'Not now',
+      state: {
+        default: 'Not enabled',
+        granted: 'Enabled',
+        denied: 'Blocked',
+      },
     },
     sidebar: {
       groupChat: 'Public chat',
@@ -204,6 +211,22 @@ export const messages = {
       title: 'Instellingen',
       youLabel: 'Jij:',
     },
+    notifications: {
+      settingsLabel: 'Meldingen:',
+      settingsHint: 'Schakel meldingen in om oproep-/berichtalerts te krijgen wanneer de app op de achtergrond staat.',
+      promptTitle: 'Meldingen inschakelen?',
+      promptBody: 'Schakel meldingen in om oproep- en berichtalerts op je telefoon te ontvangen.',
+      deniedBody: 'Meldingen zijn geblokkeerd in de browserinstellingen voor deze site.',
+      enabledBody: 'Meldingen zijn ingeschakeld.',
+      unsupportedBody: 'Meldingen worden niet ondersteund in deze browser.',
+      enable: 'Meldingen inschakelen',
+      notNow: 'Niet nu',
+      state: {
+        default: 'Niet ingeschakeld',
+        granted: 'Ingeschakeld',
+        denied: 'Geblokkeerd',
+      },
+    },
     sidebar: {
       groupChat: 'Publieke chat',
       noOneOnline: 'Er is momenteel niemand online.',
@@ -326,6 +349,22 @@ export const messages = {
     settings: {
       title: 'Paramètres',
       youLabel: 'Vous :',
+    },
+    notifications: {
+      settingsLabel: 'Notifications :',
+      settingsHint: "Activez les notifications pour recevoir des alertes d'appel/message quand l'app est en arrière-plan.",
+      promptTitle: 'Activer les notifications ?',
+      promptBody: "Activez les notifications pour recevoir des alertes d'appel et de message sur votre téléphone.",
+      deniedBody: 'Les notifications sont bloquées dans les paramètres du navigateur pour ce site.',
+      enabledBody: 'Les notifications sont activées.',
+      unsupportedBody: 'Les notifications ne sont pas prises en charge par ce navigateur.',
+      enable: 'Activer les notifications',
+      notNow: 'Pas maintenant',
+      state: {
+        default: 'Non activées',
+        granted: 'Activées',
+        denied: 'Bloquées',
+      },
     },
     sidebar: {
       groupChat: 'Chat public',
@@ -450,6 +489,22 @@ export const messages = {
       title: 'Einstellungen',
       youLabel: 'Du:',
     },
+    notifications: {
+      settingsLabel: 'Benachrichtigungen:',
+      settingsHint: 'Aktiviere Benachrichtigungen, um Anruf-/Nachrichtenhinweise im Hintergrund zu erhalten.',
+      promptTitle: 'Benachrichtigungen aktivieren?',
+      promptBody: 'Aktiviere Benachrichtigungen, um Anruf- und Nachrichtenhinweise auf deinem Handy zu erhalten.',
+      deniedBody: 'Benachrichtigungen sind in den Browser-Einstellungen für diese Seite blockiert.',
+      enabledBody: 'Benachrichtigungen sind aktiviert.',
+      unsupportedBody: 'Benachrichtigungen werden in diesem Browser nicht unterstützt.',
+      enable: 'Benachrichtigungen aktivieren',
+      notNow: 'Nicht jetzt',
+      state: {
+        default: 'Nicht aktiviert',
+        granted: 'Aktiviert',
+        denied: 'Blockiert',
+      },
+    },
     sidebar: {
       groupChat: 'Öffentlicher Chat',
       noOneOnline: 'Im Moment ist niemand online.',
@@ -573,6 +628,22 @@ export const messages = {
       title: 'Настройки',
       youLabel: 'Вы:',
     },
+    notifications: {
+      settingsLabel: 'Уведомления:',
+      settingsHint: 'Включите уведомления, чтобы получать оповещения о звонках/сообщениях, когда приложение в фоне.',
+      promptTitle: 'Включить уведомления?',
+      promptBody: 'Включите уведомления, чтобы получать оповещения о звонках и сообщениях на телефоне.',
+      deniedBody: 'Уведомления заблокированы в настройках браузера для этого сайта.',
+      enabledBody: 'Уведомления включены.',
+      unsupportedBody: 'Уведомления не поддерживаются в этом браузере.',
+      enable: 'Включить уведомления',
+      notNow: 'Не сейчас',
+      state: {
+        default: 'Не включены',
+        granted: 'Включены',
+        denied: 'Заблокированы',
+      },
+    },
     sidebar: {
       groupChat: 'Публичный чат',
       noOneOnline: 'В сети только вы.',
@@ -666,11 +737,6 @@ export function getLocale(): SupportedLocale {
 
 export function setLocale(next: SupportedLocale) {
   i18n.global.locale.value = next
-  try {
-    localStorage.setItem(STORAGE_KEY, next)
-  } catch {
-    // ignore
-  }
 }
 
 export function cycleLocale(): SupportedLocale {

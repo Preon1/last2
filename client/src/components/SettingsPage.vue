@@ -2,17 +2,20 @@
 import { storeToRefs } from 'pinia'
 import { useUiStore } from '../stores/ui'
 import { useSessionStore } from '../stores/session'
+import { useNotificationsStore } from '../stores/notifications'
 import { confirmLeave } from '../utils/confirmLeave'
 import { useI18n } from 'vue-i18n'
 import { cycleLocale } from '../i18n'
 
 const ui = useUiStore()
 const session = useSessionStore()
+const notifications = useNotificationsStore()
 
 const { t, locale } = useI18n()
 
 const { themeLabel } = storeToRefs(ui)
 const { status, techInfo, myName } = storeToRefs(session)
+const { supported: notifSupported, permission: notifPermission } = storeToRefs(notifications)
 
 function onCycleLanguage() {
   cycleLocale()
@@ -25,6 +28,10 @@ function onAbout() {
 function onLogout() {
   if (!confirmLeave('Last')) return
   session.disconnect()
+}
+
+async function onEnableNotifications() {
+  await notifications.requestPermissionAndEnable()
 }
 </script>
 
@@ -41,6 +48,23 @@ function onLogout() {
       </div>
 
       <div class="settings-actions">
+        <div class="settings-tech">
+          <div class="status">{{ t('notifications.settingsLabel') }} <strong>{{ t(`notifications.state.${String(notifPermission)}`) }}</strong></div>
+          <div v-if="!notifSupported" class="muted">{{ t('notifications.unsupportedBody') }}</div>
+          <div v-else-if="notifPermission === 'denied'" class="muted">{{ t('notifications.deniedBody') }}</div>
+          <div v-else-if="notifPermission === 'granted'" class="muted">{{ t('notifications.enabledBody') }}</div>
+          <div v-else class="muted">{{ t('notifications.settingsHint') }}</div>
+        </div>
+
+        <button
+          class="secondary"
+          type="button"
+          :disabled="!notifSupported || notifPermission !== 'default'"
+          @click="onEnableNotifications"
+        >
+          {{ t('notifications.enable') }}
+        </button>
+
         <button class="secondary" type="button" :aria-label="String(t('theme.toggleAria'))" @click="ui.cycleTheme">
           {{ themeLabel }}
         </button>
