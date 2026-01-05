@@ -410,6 +410,8 @@ function sendClientReceipt(user, ws, cMsgId, ok, code = null) {
   const receipt = {
     type: 'receipt',
     cMsgId,
+    // Stable msgId so acks clear reliably even with coalescing.
+    msgId: `receipt:${cMsgId}`,
     ok: Boolean(ok),
     ...(code ? { code } : {}),
     atIso: new Date().toISOString(),
@@ -581,12 +583,11 @@ function getVoiceStats() {
 function broadcastPresence() {
   const list = Array.from(users.values()).map((u) => ({ id: u.id, name: u.name, busy: Boolean(u.roomId) }));
 
-  // Reliable for everything: presence is sent reliably but coalesced per-user so
-  // we don't build up an unbounded retry queue.
-  const base = { type: 'presence', users: list, voice: getVoiceStats() };
+  // Presence is state, not an event: refresh periodically best-effort.
+  // (This avoids coalescing/ack edge-cases and self-heals quickly.)
+  const msg = JSON.stringify({ type: 'presence', users: list, voice: getVoiceStats() });
   for (const u of users.values()) {
-    if (u.ws.readyState !== 1) continue;
-    send(u.ws, base, { coalesceKey: 'presence' });
+    if (u.ws.readyState === 1) u.ws.send(msg);
   }
 }
 
@@ -791,8 +792,7 @@ function closeUser(userId) {
 }
 
 function rateLimit(user, nowMs) {
-  // Simple per-connection rate limit: max 20 messages per 2 seconds.
-  // Implemented as a sliding counter with time bucket.
+  // Kept for compatibility; replaced by rateLimitBucket().
   if (!user._rl) user._rl = { windowStart: nowMs, count: 0 };
   const win = user._rl;
   if (nowMs - win.windowStart > 2000) {
@@ -801,6 +801,18 @@ function rateLimit(user, nowMs) {
   }
   win.count++;
   return win.count <= 20;
+}
+
+function rateLimitBucket(user, bucket, nowMs, limit, windowMs) {
+  const key = bucket === 'signal' ? '_rlSignal' : '_rlCtrl';
+  if (!user[key]) user[key] = { windowStart: nowMs, count: 0 };
+  const win = user[key];
+  if (nowMs - win.windowStart > windowMs) {
+    win.windowStart = nowMs;
+    win.count = 0;
+  }
+  win.count++;
+  return win.count <= limit;
 }
 
 wss.on('connection', (ws, req) => {
@@ -861,7 +873,16 @@ wss.on('connection', (ws, req) => {
       }
     }
 
-    if (!rateLimit(user, now)) {
+    const type = msg.type;
+    const isSignal = type === 'signal';
+    const isCritical = type === 'callHangup' || type === 'ack' || type === 'ping' || type === 'clientHello';
+
+    // Separate limits: signaling can be bursty; control traffic should stay responsive.
+    const okRate = isSignal
+      ? rateLimitBucket(user, 'signal', now, 250, 2000)
+      : rateLimitBucket(user, 'ctrl', now, 40, 2000);
+
+    if (!okRate && !isCritical) {
       send(ws, { type: 'error', code: 'RATE_LIMIT' });
       if (cMsgId) sendClientReceipt(user, ws, cMsgId, false, 'RATE_LIMIT');
       return;
