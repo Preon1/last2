@@ -154,6 +154,12 @@ export const useSessionStore = defineStore('session', () => {
     chat.value = []
     status.value = ''
 
+    try {
+      ui.goHome()
+    } catch {
+      // ignore
+    }
+
     for (const h of disconnectHandlers) {
       try {
         h()

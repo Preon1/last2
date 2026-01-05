@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { watchEffect } from 'vue'
+import { watch, watchEffect } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useSessionStore } from './stores/session'
 import { useNotificationsStore } from './stores/notifications'
+import { useUiStore } from './stores/ui'
 import SetupScreen from './components/SetupScreen.vue'
 import AppShell from './components/AppShell.vue'
 import AboutModal from './components/AboutModal.vue'
@@ -11,6 +12,7 @@ import { useBeforeUnloadConfirm } from './utils/beforeUnloadConfirm'
 
 const session = useSessionStore()
 const notifications = useNotificationsStore()
+const ui = useUiStore()
 const { inApp, status } = storeToRefs(session)
 
 useWakeLock(inApp)
@@ -21,6 +23,14 @@ watchEffect(() => {
   if (!session.connected) return
   notifications.autoRequestAfterLogin()
 })
+
+watch(
+  inApp,
+  (next, prev) => {
+    if (next && !prev) ui.goHome()
+  },
+  { flush: 'post' },
+)
 </script>
 
 <template>
