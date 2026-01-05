@@ -14,7 +14,7 @@ const { t } = useI18n()
 
 const { users } = storeToRefs(session)
 const { activeChatName, activeChatLabel } = storeToRefs(ui)
-const { inCall, outgoingPending, pendingIncomingFrom, joinPending, joinConfirmToId, joinConfirmToName } = storeToRefs(call)
+const { joinConfirmToId, joinConfirmToName } = storeToRefs(call)
 
 const isGroup = computed(() => !activeChatName.value)
 
@@ -29,28 +29,7 @@ const peerOnline = computed(() => {
   return Boolean(activePeer.value)
 })
 
-const canCallActivePeer = computed(() => {
-  const peer = activePeer.value
-  if (!peer) return false
-  if (!peer.id || !peer.name) return false
-  if (pendingIncomingFrom.value) return false
-  if (outgoingPending.value) return false
-  if (inCall.value) return false
-  if (joinPending.value) return false
-  return true
-})
-
-function onCallActivePeer() {
-  const peer = activePeer.value
-  if (!peer || !peer.id || !peer.name) return
-  if (peer.busy) {
-    call.openJoinConfirm(peer.id, peer.name)
-    return
-  }
-  void call.startCall(peer.id, peer.name)
-}
-
-const showCallButton = computed(() => !isGroup.value)
+// Call button is rendered separately (top-right) for private chats.
 </script>
 
 <template>
@@ -64,17 +43,6 @@ const showCallButton = computed(() => !isGroup.value)
         aria-hidden="true"
       />
     </div>
-
-    <button
-      v-if="showCallButton"
-      class="secondary icon-only"
-      type="button"
-      :aria-label="String(t('chat.callAria'))"
-      :disabled="!canCallActivePeer"
-      @click="onCallActivePeer"
-    >
-      <svg class="icon" aria-hidden="true" focusable="false"><use xlink:href="/icons.svg#call"></use></svg>
-    </button>
 
     <!-- Keep join confirm modal within chat context (call UX) -->
     <div

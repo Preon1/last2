@@ -707,19 +707,20 @@ button:disabled {
   gap: 10px;
 }
 
-.nav-back {
+.floating-header {
   position: fixed;
   top: 12px;
   left: 12px;
+  right: 12px;
   z-index: 90;
+  display: flex;
+  align-items: center;
+  gap: 12px;
 }
 
 .chat-topbar {
-  position: fixed;
-  top: 12px;
-  left: 60px;
-  right: 12px;
-  z-index: 90;
+  flex: 1;
+  min-width: 0;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -731,6 +732,10 @@ button:disabled {
   backdrop-filter: blur(var(--glass-blur));
   -webkit-backdrop-filter: blur(var(--glass-blur));
   border-radius: 50px;
+}
+
+.chat-callbtn {
+  flex: 0 0 auto;
 }
 
 .chat-topbar-left {
@@ -947,7 +952,3 @@ button:disabled {
   -webkit-backdrop-filter: blur(var(--glass-blur));
 }
 
-
-.headergap{
-  padding-top: 55px;
-}
