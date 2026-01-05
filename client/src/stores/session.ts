@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
 import { useUiStore } from './ui'
 import { i18n } from '../i18n'
+import { notify, vibrate } from '../utils/notify'
 
 export type PresenceUser = {
   id: string
@@ -260,8 +261,20 @@ export const useSessionStore = defineStore('session', () => {
         try {
           if (myName.value && fromName === myName.value) return
 
+          const hasFocus = typeof document.hasFocus === 'function' ? document.hasFocus() : true
+          const shouldNotifyForAttention = document.hidden || !hasFocus
+
           if (!isPrivate) {
             if (!ui.isViewingChat(null)) ui.bumpUnread(null)
+
+            // Notify if the user isn't currently viewing the public chat, or app isn't focused.
+            if (shouldNotifyForAttention || !ui.isViewingChat(null)) {
+              const preview = text.length > 140 ? `${text.slice(0, 137)}…` : text
+              notify(String(i18n.global.t('sidebar.groupChat')), `${fromName}: ${preview}`, {
+                tag: 'lrcom-chat-public',
+              })
+              vibrate([100])
+            }
             return
           }
 
@@ -272,6 +285,13 @@ export const useSessionStore = defineStore('session', () => {
 
           if (!other) return
           if (!ui.isViewingChat(other)) ui.bumpUnread(other)
+
+          // Notify if the user isn't currently viewing this private chat, or app isn't focused.
+          if (shouldNotifyForAttention || !ui.isViewingChat(other)) {
+            const preview = text.length > 140 ? `${text.slice(0, 137)}…` : text
+            notify(other, preview, { tag: `lrcom-chat-${other}` })
+            vibrate([100])
+          }
         } catch {
           // ignore
         }
