@@ -3,6 +3,7 @@ import { computed, ref } from 'vue'
 import { useUiStore } from './ui'
 import { i18n } from '../i18n'
 import { notify, vibrate } from '../utils/notify'
+import { useToastStore } from './toast'
 
 export type PresenceUser = {
   id: string
@@ -75,24 +76,37 @@ function wsUrl() {
 
 export const useSessionStore = defineStore('session', () => {
   const ui = useUiStore()
+  const toast = useToastStore()
   const ws = ref<WebSocket | null>(null)
 
   const pingTimer = ref<number | null>(null)
 
   const outboxTimer = ref<number | null>(null)
-  const outbox = new Map<string, { json: string; attempts: number; nextAt: number }>()
-  const OUTBOX_MAX_ATTEMPTS = 6
-  const OUTBOX_BASE_DELAY_MS = 600
-  const OUTBOX_MAX_DELAY_MS = 8000
+  const outbox = new Map<
+    string,
+    {
+      json: string
+      attempts: number
+      nextAt: number
+      maxAttempts: number
+      fixedDelayMs?: number
+      kind?: string
+    }
+  >()
+
+  const OUTBOX_DEFAULT_MAX_ATTEMPTS = 6
+  const OUTBOX_DEFAULT_BASE_DELAY_MS = 600
+  const OUTBOX_DEFAULT_MAX_DELAY_MS = 8000
 
   const seenMsgIds = new Set<string>()
   const seenMsgIdQueue: string[] = []
   const SEEN_MSGIDS_MAX = 2000
 
-  function calcOutboxDelayMs(attempts: number) {
+  function calcOutboxDelayMs(attempts: number, fixedDelayMs?: number) {
+    if (typeof fixedDelayMs === 'number') return Math.max(0, fixedDelayMs)
     const exp = Math.max(0, attempts - 1)
-    const delay = OUTBOX_BASE_DELAY_MS * Math.pow(2, exp)
-    return Math.min(OUTBOX_MAX_DELAY_MS, Math.max(OUTBOX_BASE_DELAY_MS, delay))
+    const delay = OUTBOX_DEFAULT_BASE_DELAY_MS * Math.pow(2, exp)
+    return Math.min(OUTBOX_DEFAULT_MAX_DELAY_MS, Math.max(OUTBOX_DEFAULT_BASE_DELAY_MS, delay))
   }
 
   function makeClientMsgId() {
@@ -170,8 +184,16 @@ export const useSessionStore = defineStore('session', () => {
       const now = Date.now()
       for (const [cMsgId, entry] of outbox) {
         if (entry.nextAt > now) continue
-        if (entry.attempts >= OUTBOX_MAX_ATTEMPTS) {
+        if (entry.attempts >= entry.maxAttempts) {
           outbox.delete(cMsgId)
+
+          // Only required UX: show a global popup when server didn't receive chat.
+          if (entry.kind === 'chatSend') {
+            toast.error(
+              String(i18n.global.t('toast.chatSendFailedTitle')),
+              String(i18n.global.t('toast.chatSendFailedBody')),
+            )
+          }
           continue
         }
         try {
@@ -180,7 +202,7 @@ export const useSessionStore = defineStore('session', () => {
           // ignore
         }
         entry.attempts += 1
-        entry.nextAt = now + calcOutboxDelayMs(entry.attempts)
+        entry.nextAt = now + calcOutboxDelayMs(entry.attempts, entry.fixedDelayMs)
       }
     }, 500)
   }
@@ -193,7 +215,10 @@ export const useSessionStore = defineStore('session', () => {
     outbox.clear()
   }
 
-  function sendReliable(obj: Record<string, unknown>) {
+  function sendReliable(
+    obj: Record<string, unknown>,
+    opts?: { kind?: string; maxAttempts?: number; fixedDelayMs?: number },
+  ) {
     if (!ws.value || ws.value.readyState !== WebSocket.OPEN) return
     const cMsgId = makeClientMsgId()
     const payload = { ...obj, cMsgId }
@@ -208,7 +233,10 @@ export const useSessionStore = defineStore('session', () => {
     outbox.set(cMsgId, {
       json,
       attempts: 1,
-      nextAt: Date.now() + calcOutboxDelayMs(1),
+      nextAt: Date.now() + calcOutboxDelayMs(1, opts?.fixedDelayMs),
+      maxAttempts: opts?.maxAttempts ?? OUTBOX_DEFAULT_MAX_ATTEMPTS,
+      ...(typeof opts?.fixedDelayMs === 'number' ? { fixedDelayMs: opts.fixedDelayMs } : {}),
+      ...(opts?.kind ? { kind: opts.kind } : {}),
     })
   }
 
@@ -221,7 +249,12 @@ export const useSessionStore = defineStore('session', () => {
     }
 
     if (o && type) {
-      sendReliable(o as Record<string, unknown>)
+      if (type === 'chatSend') {
+        // Messaging policy: attempt each second 5 times, then fail.
+        sendReliable(o as Record<string, unknown>, { kind: 'chatSend', maxAttempts: 5, fixedDelayMs: 1000 })
+      } else {
+        sendReliable(o as Record<string, unknown>)
+      }
       return
     }
 
@@ -434,9 +467,9 @@ export const useSessionStore = defineStore('session', () => {
           }
 
           // For private messages, map to the "other" participant.
-          const other = myName.value && fromName === myName.value
+          const other = fromName === 'System'
             ? (toName ?? null)
-            : fromName
+            : (myName.value && fromName === myName.value ? (toName ?? null) : fromName)
 
           if (!other) return
           if (!ui.isViewingChat(other)) ui.bumpUnread(other)

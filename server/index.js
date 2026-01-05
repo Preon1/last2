@@ -229,10 +229,28 @@ function calcRetryDelayMs(attempts) {
   return Math.min(RELIABLE_MAX_DELAY_MS, Math.max(RELIABLE_BASE_DELAY_MS, delay));
 }
 
-function queueReliable(userId, key, msgId, json) {
+function calcRetryDelayMsWithPolicy(attempts, policy) {
+  if (policy?.fixedDelayMs) return Math.max(0, Number(policy.fixedDelayMs) || 0);
+  const base = Number(policy?.baseDelayMs ?? RELIABLE_BASE_DELAY_MS);
+  const max = Number(policy?.maxDelayMs ?? RELIABLE_MAX_DELAY_MS);
+  const exp = Math.max(0, attempts - 1);
+  const delay = base * Math.pow(2, exp);
+  return Math.min(max, Math.max(base, delay));
+}
+
+function queueReliable(userId, key, msgId, json, policy = null, meta = null) {
   if (!pendingReliable.has(userId)) pendingReliable.set(userId, new Map());
   const perUser = pendingReliable.get(userId);
-  perUser.set(key, { msgId, json, attempts: 1, nextAt: Date.now() + calcRetryDelayMs(1) });
+  const maxAttempts = Number(policy?.maxAttempts ?? RELIABLE_MAX_ATTEMPTS);
+  perUser.set(key, {
+    msgId,
+    json,
+    attempts: 1,
+    maxAttempts,
+    policy,
+    meta,
+    nextAt: Date.now() + calcRetryDelayMsWithPolicy(1, policy),
+  });
 }
 
 function ackReliable(userId, msgId) {
@@ -261,23 +279,57 @@ function flushReliableForUser(user) {
   for (const [key, entry] of perUser) {
     if (entry.nextAt > now) continue;
 
-    if (entry.attempts >= RELIABLE_MAX_ATTEMPTS) {
+    if (entry.attempts >= (entry.maxAttempts ?? RELIABLE_MAX_ATTEMPTS)) {
       perUser.delete(key);
+      if (entry?.meta) {
+        try {
+          handleReliableDeliveryFailure(entry.meta);
+        } catch {
+          // ignore
+        }
+      }
       continue;
     }
 
     try {
       user.ws.send(entry.json);
       entry.attempts += 1;
-      entry.nextAt = now + calcRetryDelayMs(entry.attempts);
+      entry.nextAt = now + calcRetryDelayMsWithPolicy(entry.attempts, entry.policy);
     } catch {
       // If send throws, we'll try again later.
       entry.attempts += 1;
-      entry.nextAt = now + calcRetryDelayMs(entry.attempts);
+      entry.nextAt = now + calcRetryDelayMsWithPolicy(entry.attempts, entry.policy);
     }
   }
 
   if (perUser.size === 0) pendingReliable.delete(user.id);
+}
+
+function handleReliableDeliveryFailure(meta) {
+  // Only used for private message delivery failure notifications.
+  if (!meta || meta.kind !== 'pmDelivery' || !meta.fromUserId || !meta.toName) return;
+
+  const fromUser = users.get(meta.fromUserId);
+  if (!fromUser || !fromUser.name || !fromUser.ws || fromUser.ws.readyState !== 1) return;
+
+  const atIso = new Date().toISOString();
+  const id = makeMsgId();
+  const text = `Delivery failed: ${meta.toName} is offline or unreachable.`;
+
+  const msg = {
+    type: 'chat',
+    id,
+    atIso,
+    from: null,
+    fromName: 'System',
+    to: fromUser.id,
+    toName: meta.toName,
+    text,
+    private: true,
+    msgId: id,
+  };
+
+  send(fromUser.ws, msg, { maxAttempts: 5, fixedDelayMs: 1000, coalesceKey: `pmfail:${id}` });
 }
 
 function sendBestEffort(ws, obj) {
@@ -308,7 +360,14 @@ function sendReliableToUser(user, obj, opts = null) {
   } catch {
     // ignore immediate failures; retry loop will handle.
   }
-  queueReliable(user.id, key, msgId, json);
+  const policy = {
+    maxAttempts: opts?.maxAttempts,
+    fixedDelayMs: opts?.fixedDelayMs,
+    baseDelayMs: opts?.baseDelayMs,
+    maxDelayMs: opts?.maxDelayMs,
+  };
+  const meta = opts?.meta ?? null;
+  queueReliable(user.id, key, msgId, json, policy, meta);
 }
 
 function send(ws, obj, opts = null) {
@@ -605,7 +664,7 @@ function broadcastChat(fromUser, text) {
 
   for (const u of users.values()) {
     if (!u.name) continue;
-    sendReliableToUser(u, base);
+    send(u.ws, base, { maxAttempts: 5, fixedDelayMs: 1000 });
 
     if (u.id !== fromUser.id) {
       void sendPushToUser(u.id, {
@@ -634,7 +693,7 @@ function broadcastSystem(text) {
 
   for (const u of users.values()) {
     if (!u.name) continue;
-    sendReliableToUser(u, base);
+    send(u.ws, base, { maxAttempts: 5, fixedDelayMs: 1000 });
   }
 }
 
@@ -654,8 +713,15 @@ function sendPrivateChat(fromUser, toUser, text) {
     msgId: id,
   };
 
-  sendReliableToUser(fromUser, base);
-  sendReliableToUser(toUser, base);
+  // Sender always gets their local echo reliably.
+  send(fromUser.ws, base, { maxAttempts: 5, fixedDelayMs: 1000 });
+
+  // Recipient delivery: retry 1s x 5, then notify sender via System message.
+  send(toUser.ws, base, {
+    maxAttempts: 5,
+    fixedDelayMs: 1000,
+    meta: { kind: 'pmDelivery', fromUserId: fromUser.id, toName: toUser.name },
+  });
 
   void sendPushToUser(toUser.id, {
     title: `${APP_NAME} private message`,
@@ -704,6 +770,18 @@ function closeUser(userId) {
   }
 
   users.delete(userId);
+  // If this user had pending reliable messages (as a recipient), notify senders
+  // for private-message deliveries that were still awaiting ack.
+  try {
+    const perUser = pendingReliable.get(userId);
+    if (perUser) {
+      for (const entry of perUser.values()) {
+        if (entry?.meta) handleReliableDeliveryFailure(entry.meta);
+      }
+    }
+  } catch {
+    // ignore
+  }
   pendingReliable.delete(userId);
   pushSubscriptions.delete(userId);
   if (name && nameToId.get(name) === userId) nameToId.delete(name);
@@ -1151,6 +1229,11 @@ wss.on('connection', (ws, req) => {
         if (!toUser || !toUser.name) {
           send(ws, { type: 'error', code: 'PM_NOT_FOUND' });
           if (cMsgId) sendClientReceipt(user, ws, cMsgId, false, 'PM_NOT_FOUND');
+          try {
+            handleReliableDeliveryFailure({ kind: 'pmDelivery', fromUserId: user.id, toName });
+          } catch {
+            // ignore
+          }
           return;
         }
         if (toUser.id === user.id) {

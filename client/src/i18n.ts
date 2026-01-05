@@ -54,6 +54,10 @@ export const messages = {
       unreadMessages: 'Unread messages',
       logout: 'Logout',
     },
+    toast: {
+      chatSendFailedTitle: 'Message not sent',
+      chatSendFailedBody: "Couldn't reach the server. Please check your connection and try again.",
+    },
     setup: {
       subtitle: 'Anonymous, encrypted voice web messenger with no registration and no chat history.',
       yourName: 'Your name',
@@ -173,6 +177,10 @@ export const messages = {
       unreadMessages: 'Ongelezen berichten',
       logout: 'Uitloggen',
     },
+    toast: {
+      chatSendFailedTitle: 'Bericht niet verzonden',
+      chatSendFailedBody: 'Kon de server niet bereiken. Controleer je verbinding en probeer het opnieuw.',
+    },
     setup: {
       subtitle: 'Anonieme, versleutelde spraak-webmessenger zonder registratie en zonder chatgeschiedenis.',
       yourName: 'Jouw naam',
@@ -210,6 +218,10 @@ export const messages = {
       joinOngoingBody: 'Je probeert deel te nemen aan een lopend gesprek.',
       callAria: 'Bellen',
       sendAria: 'Versturen',
+      toast: {
+        chatSendFailedTitle: 'Message non envoyé',
+        chatSendFailedBody: "Impossible de joindre le serveur. Vérifiez votre connexion et réessayez.",
+      },
     },
     call: {
       notInCall: 'Niet in gesprek',
@@ -411,6 +423,10 @@ export const messages = {
       unreadMessages: 'Ungelesene Nachrichten',
       logout: 'Abmelden',
     },
+    toast: {
+      chatSendFailedTitle: 'Nachricht nicht gesendet',
+      chatSendFailedBody: 'Server nicht erreichbar. Bitte Verbindung prüfen und erneut versuchen.',
+    },
     setup: {
       subtitle: 'Anonymer, verschlüsselter Voice-Web-Messenger ohne Registrierung und ohne Chatverlauf.',
       yourName: 'Dein Name',
@@ -448,6 +464,10 @@ export const messages = {
       joinOngoingBody: 'Du versuchst, einem laufenden Anruf beizutreten.',
       callAria: 'Anrufen',
       sendAria: 'Senden',
+      toast: {
+        chatSendFailedTitle: 'Сообщение не отправлено',
+        chatSendFailedBody: 'Не удалось связаться с сервером. Проверьте подключение и попробуйте снова.',
+      },
     },
     call: {
       notInCall: 'Nicht im Anruf',

@@ -7,6 +7,7 @@ import { useUiStore } from './stores/ui'
 import SetupScreen from './components/SetupScreen.vue'
 import AppShell from './components/AppShell.vue'
 import AboutModal from './components/AboutModal.vue'
+import ToastHost from './components/ToastHost.vue'
 import { useWakeLock } from './utils/wakeLock'
 import { useBeforeUnloadConfirm } from './utils/beforeUnloadConfirm'
 
@@ -37,6 +38,8 @@ watch(
   <main>
     <SetupScreen v-if="!inApp" :status="status" @join="session.connect" />
     <AppShell v-else />
+
+    <ToastHost />
 
     <AboutModal />
   </main>
