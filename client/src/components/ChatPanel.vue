@@ -3,23 +3,17 @@ import { computed, ref, watchEffect } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useSessionStore } from '../stores/session'
 import { useUiStore } from '../stores/ui'
-import { useCallStore } from '../stores/call'
-import CallPanel from './CallPanel.vue'
 import { useI18n } from 'vue-i18n'
 
 const session = useSessionStore()
 const ui = useUiStore()
-const call = useCallStore()
 
 const { t } = useI18n()
 
 const { chat } = storeToRefs(session)
 const { replyToId, activeChatName } = storeToRefs(ui)
-const { inCall, outgoingPending, pendingIncomingFrom, joinPending } = storeToRefs(call)
 
-const showCallPanel = computed(() => Boolean(pendingIncomingFrom.value) || outgoingPending.value || inCall.value || joinPending.value)
-
-// Call button + join confirm are handled by ChatTopBar.
+// Call button + join confirm are handled by ChatTopBar, and the call panel is mounted globally.
 
 const chatInput = ref('')
 const chatMessagesEl = ref<HTMLElement | null>(null)
@@ -170,8 +164,6 @@ function onClickReplyTarget(id: string) {
 
 <template>
   <section class="chat">
-    <CallPanel v-if="showCallPanel" />
-
     <div ref="chatMessagesEl" class="chat-messages" aria-live="polite">
       <div
         v-for="(m, i) in renderedChat"
