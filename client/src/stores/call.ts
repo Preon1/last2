@@ -69,7 +69,9 @@ export const useCallStore = defineStore('call', () => {
 
   const remoteStreams = ref<Record<string, MediaStream>>({})
 
-  const peerNames = new Map<string, string>()
+  // Peer display names must be reactive because the call UI derives its label from them.
+  // Use a plain object for reliable Vue reactivity.
+  const peerNames = ref<Record<string, string>>({})
   const pcs = new Map<string, RTCPeerConnection>()
 
   let localStream: MediaStream | null = null
@@ -118,15 +120,28 @@ export const useCallStore = defineStore('call', () => {
   }
 
   const inCall = computed(() => Boolean(roomId.value))
-  const peers = computed(() => Array.from(peerNames.entries()).map(([id, name]) => ({ id, name })))
+  const peers = computed(() => Object.entries(peerNames.value).map(([id, name]) => ({ id, name })))
 
   const callLabel = computed(() => {
     // Ensure this recomputes when locale changes.
     void i18n.global.locale.value
+    if (!roomId.value) return String(i18n.global.t('call.notInCall'))
+
     const names = peers.value.map((p) => p.name).filter(Boolean)
-    if (names.length === 0) return String(i18n.global.t('call.notInCall'))
+    if (names.length === 0) return String(i18n.global.t('call.connecting'))
     return String(i18n.global.t('call.inCall', { names: names.join(', ') }))
   })
+
+  function setPeerName(peerId: string, name: string) {
+    peerNames.value = { ...peerNames.value, [peerId]: name }
+  }
+
+  function deletePeerName(peerId: string) {
+    if (!(peerId in peerNames.value)) return
+    const next = { ...peerNames.value }
+    delete next[peerId]
+    peerNames.value = next
+  }
 
   function updateTimer() {
     if (timerStartMs.value == null) return
@@ -219,14 +234,14 @@ export const useCallStore = defineStore('call', () => {
     delete streams[peerId]
     remoteStreams.value = streams
 
-    peerNames.delete(peerId)
+    deletePeerName(peerId)
   }
 
   function resetCallState() {
     stopRingtone()
     for (const id of Array.from(pcs.keys())) closePeer(id)
 
-    peerNames.clear()
+    peerNames.value = {}
     roomId.value = null
 
     pendingIncomingFrom.value = null
@@ -350,7 +365,7 @@ export const useCallStore = defineStore('call', () => {
       }
       if (pc.connectionState === 'failed' || pc.connectionState === 'closed') {
         closePeer(peerId)
-        if (peerNames.size === 0) resetCallState()
+        if (Object.keys(peerNames.value).length === 0) resetCallState()
       }
     })
 
@@ -365,7 +380,7 @@ export const useCallStore = defineStore('call', () => {
       return
     }
 
-    peerNames.set(toId, toName)
+    setPeerName(toId, toName)
 
     if (!roomId.value) {
       outgoingPending.value = true
@@ -530,7 +545,7 @@ export const useCallStore = defineStore('call', () => {
           const id = asString(po.id)
           if (!id || id === session.myId) continue
           const name = asString(po.name) ?? ''
-          peerNames.set(id, name)
+          setPeerName(id, name)
           await ensurePeerConnection(id)
         }
       } catch (err) {
@@ -549,7 +564,7 @@ export const useCallStore = defineStore('call', () => {
       const peerId = peerObj ? asString(peerObj.id) : null
       if (!peerId || peerId === session.myId) return
       const peerName = peerObj ? (asString(peerObj.name) ?? '') : ''
-      peerNames.set(peerId, peerName)
+      setPeerName(peerId, peerName)
 
       let pc: RTCPeerConnection
       try {
@@ -570,7 +585,7 @@ export const useCallStore = defineStore('call', () => {
     if (type === 'roomPeerLeft') {
       const peerId = asString(obj.peerId)
       if (peerId) closePeer(peerId)
-      if (peerNames.size === 0) resetCallState()
+      if (Object.keys(peerNames.value).length === 0) resetCallState()
       return
     }
 
@@ -579,7 +594,7 @@ export const useCallStore = defineStore('call', () => {
       const kind = payloadObj ? asString(payloadObj.kind) : null
       const fromId = asString(obj.from)
       const fromName = asString(obj.fromName)
-      if (fromId && fromName) peerNames.set(fromId, fromName)
+      if (fromId && fromName) setPeerName(fromId, fromName)
       if (!payloadObj || !kind || !fromId) return
 
       if (kind === 'offer') {
