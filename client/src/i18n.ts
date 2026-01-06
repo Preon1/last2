@@ -3,6 +3,8 @@ import { createI18n } from 'vue-i18n'
 export const supportedLocales = ['en', 'nl', 'fr', 'de', 'ru'] as const
 export type SupportedLocale = (typeof supportedLocales)[number]
 
+const STORAGE_KEY = 'lrcom-locale'
+
 function normalizeLocale(raw: string | null | undefined): SupportedLocale | null {
   const s = (raw ?? '').trim().toLowerCase()
   if (!s) return null
@@ -18,6 +20,13 @@ function normalizeLocale(raw: string | null | undefined): SupportedLocale | null
 }
 
 function detectInitialLocale(): SupportedLocale {
+  try {
+    const saved = normalizeLocale(sessionStorage.getItem(STORAGE_KEY))
+    if (saved) return saved
+  } catch {
+    // ignore
+  }
+
   const nav =
     normalizeLocale(navigator.language) ??
     normalizeLocale(Array.isArray(navigator.languages) ? navigator.languages[0] : null) ??
@@ -737,6 +746,11 @@ export function getLocale(): SupportedLocale {
 
 export function setLocale(next: SupportedLocale) {
   i18n.global.locale.value = next
+  try {
+    sessionStorage.setItem(STORAGE_KEY, next)
+  } catch {
+    // ignore
+  }
 }
 
 export function cycleLocale(): SupportedLocale {

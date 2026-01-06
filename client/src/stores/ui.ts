@@ -84,6 +84,14 @@ export const useUiStore = defineStore('ui', () => {
   }
 
   function loadTheme() {
+    try {
+      const raw = sessionStorage.getItem('lrcom-theme')
+      if (raw === 'dark' || raw === 'light' || raw === 'system') {
+        themeMode.value = raw
+      }
+    } catch {
+      // ignore
+    }
     applyTheme()
   }
 
@@ -115,7 +123,12 @@ export const useUiStore = defineStore('ui', () => {
   loadTheme()
   watch(
     themeMode,
-    () => {
+    (v) => {
+      try {
+        sessionStorage.setItem('lrcom-theme', v)
+      } catch {
+        // ignore
+      }
       applyTheme()
     },
     { flush: 'post' },
