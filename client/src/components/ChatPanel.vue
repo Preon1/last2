@@ -13,6 +13,16 @@ const { t } = useI18n()
 const { chat, users } = storeToRefs(session)
 const { replyToId, activeChatName } = storeToRefs(ui)
 
+// Auto-focus textarea on desktop when chat opens
+watchEffect(() => {
+  void activeChatName.value
+  queueMicrotask(() => {
+    if (chatInputEl.value && window.innerWidth > 768) {
+      chatInputEl.value.focus()
+    }
+  })
+})
+
 // Call button + join confirm are handled by ChatTopBar, and the call panel is mounted globally.
 
 const chatInput = ref('')
