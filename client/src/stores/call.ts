@@ -230,7 +230,28 @@ export const useCallStore = defineStore('call', () => {
 
   async function ensureMic() {
     if (localStream) return localStream
-    localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false })
+    
+    // Build audio constraints from environment variables (defaults to browser defaults)
+    const audioConstraints: MediaTrackConstraints = {
+      echoCancellation: import.meta.env.VITE_AUDIO_ECHO_CANCELLATION !== undefined 
+        ? import.meta.env.VITE_AUDIO_ECHO_CANCELLATION === 'true' 
+        : true,
+      noiseSuppression: import.meta.env.VITE_AUDIO_NOISE_SUPPRESSION !== undefined
+        ? import.meta.env.VITE_AUDIO_NOISE_SUPPRESSION === 'true'
+        : true,
+      autoGainControl: import.meta.env.VITE_AUDIO_AUTO_GAIN !== undefined
+        ? import.meta.env.VITE_AUDIO_AUTO_GAIN === 'true'
+        : true,
+    }
+    
+    if (import.meta.env.VITE_AUDIO_SAMPLE_RATE) {
+      const rate = Number.parseInt(import.meta.env.VITE_AUDIO_SAMPLE_RATE, 10)
+      if (!Number.isNaN(rate) && rate >= 8000 && rate <= 96000) {
+        audioConstraints.sampleRate = rate
+      }
+    }
+    
+    localStream = await navigator.mediaDevices.getUserMedia({ audio: audioConstraints, video: false })
     return localStream
   }
 
@@ -643,7 +664,20 @@ export const useCallStore = defineStore('call', () => {
       status.value = String(i18n.global.t('call.connecting'))
       const offer = await pc.createOffer({ offerToReceiveAudio: true, offerToReceiveVideo: false })
       await pc.setLocalDescription(offer)
-      session.send({ type: 'signal', to: peerId, payload: { kind: 'offer', sdp: offer } })
+      
+      // Apply bitrate limit if configured
+      if (import.meta.env.VITE_AUDIO_MAX_BITRATE && pc.localDescription) {
+        const bitrate = Number.parseInt(import.meta.env.VITE_AUDIO_MAX_BITRATE, 10)
+        if (!Number.isNaN(bitrate) && bitrate >= 6 && bitrate <= 510) {
+          const sdp = pc.localDescription.sdp.replace(
+            /(m=audio.*\r\n)/g,
+            `$1b=AS:${bitrate}\r\n`
+          )
+          await pc.setLocalDescription({ type: pc.localDescription.type, sdp })
+        }
+      }
+      
+      session.send({ type: 'signal', to: peerId, payload: { kind: 'offer', sdp: pc.localDescription } })
       return
     }
 
@@ -675,7 +709,20 @@ export const useCallStore = defineStore('call', () => {
         await pc.setRemoteDescription(sdp)
         const answer = await pc.createAnswer()
         await pc.setLocalDescription(answer)
-        session.send({ type: 'signal', to: fromId, payload: { kind: 'answer', sdp: answer } })
+        
+        // Apply bitrate limit if configured
+        if (import.meta.env.VITE_AUDIO_MAX_BITRATE && pc.localDescription) {
+          const bitrate = Number.parseInt(import.meta.env.VITE_AUDIO_MAX_BITRATE, 10)
+          if (!Number.isNaN(bitrate) && bitrate >= 6 && bitrate <= 510) {
+            const sdp = pc.localDescription.sdp.replace(
+              /(m=audio.*\r\n)/g,
+              `$1b=AS:${bitrate}\r\n`
+            )
+            await pc.setLocalDescription({ type: pc.localDescription.type, sdp })
+          }
+        }
+        
+        session.send({ type: 'signal', to: fromId, payload: { kind: 'answer', sdp: pc.localDescription } })
         return
       }
 
