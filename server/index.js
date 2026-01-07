@@ -1323,8 +1323,5 @@ setInterval(() => {
 }, RELIABLE_PUMP_MS);
 
 server.listen(PORT, HOST, () => {
-  // Intentionally minimal logs
-  if (process.env.STARTUP_LOG === '1') {
-    console.log(`${APP_NAME} listening on https://${HOST}:${PORT}`);
-  }
+  // No logs (policy: no connection tracking, IPs, or device info)
 });

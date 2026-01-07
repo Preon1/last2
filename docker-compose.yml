@@ -1,6 +1,8 @@
 services:
   lrcom:
     build: .
+    logging:
+      driver: none
     ports:
       - "8443:8443"
     environment:
@@ -37,6 +39,8 @@ services:
   coturn:
     image: coturn/coturn:4.6.2
     restart: unless-stopped
+    logging:
+      driver: none
     environment:
       - LRCOM_TURN_EXTERNAL_IP=${LRCOM_TURN_EXTERNAL_IP:-}
     command:
@@ -44,7 +48,8 @@ services:
       - -c
       - |
         turnserver -n \
-          --log-file=stdout \
+          --log-file=/dev/null \
+          --no-stdout-log \
           --use-auth-secret \
           --static-auth-secret=${LRCOM_TURN_SECRET:-change-me} \
           --realm=lrcom \
