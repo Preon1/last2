@@ -83,6 +83,13 @@ export const useCallStore = defineStore('call', () => {
   let ringtoneGain: GainNode | null = null
   let ringtoneInterval: number | null = null
 
+  // Automatic reconnection state
+  let intentionalHangup = false
+  let reconnectAttempts = 0
+  let reconnectTimer: number | null = null
+  const MAX_RECONNECT_ATTEMPTS = 3
+  const RECONNECT_DELAY_MS = 1000
+
   function getAudioContextCtor(): typeof AudioContext | null {
     return (window.AudioContext || (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext) ?? null
   }
@@ -237,8 +244,16 @@ export const useCallStore = defineStore('call', () => {
     deletePeerName(peerId)
   }
 
+  function clearReconnectTimer() {
+    if (reconnectTimer != null) {
+      window.clearTimeout(reconnectTimer)
+      reconnectTimer = null
+    }
+  }
+
   function resetCallState() {
     stopRingtone()
+    clearReconnectTimer()
     for (const id of Array.from(pcs.keys())) closePeer(id)
 
     peerNames.value = {}
@@ -263,6 +278,10 @@ export const useCallStore = defineStore('call', () => {
     joinRequestRoomId.value = null
 
     resetTimer()
+
+    // Clear reconnection state
+    intentionalHangup = false
+    reconnectAttempts = 0
 
     try {
       localStream?.getTracks().forEach((t) => t.stop())
@@ -359,12 +378,34 @@ export const useCallStore = defineStore('call', () => {
     pc.addEventListener('connectionstatechange', () => {
       if (!pcs.has(peerId)) return
       if (pc.connectionState === 'connected') {
+        // Clear reconnection state on successful connection
+        reconnectAttempts = 0
+        clearReconnectTimer()
         startTimerIfNeeded()
         const connectedLabel = String(i18n.global.t('call.connected'))
         if (status.value !== connectedLabel) status.value = connectedLabel
       }
       if (pc.connectionState === 'failed' || pc.connectionState === 'closed') {
         closePeer(peerId)
+        
+        // If connection failed and it wasn't an intentional hangup, attempt reconnection
+        if (!intentionalHangup && roomId.value && reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
+          reconnectAttempts++
+          status.value = `Reconnecting... (${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})`
+          
+          clearReconnectTimer()
+          reconnectTimer = window.setTimeout(async () => {
+            // Re-establish peer connection
+            try {
+              await ensurePeerConnection(peerId)
+            } catch (err) {
+              status.value = micErrorToStatus(err)
+            }
+          }, RECONNECT_DELAY_MS)
+          
+          return
+        }
+        
         if (Object.keys(peerNames.value).length === 0) resetCallState()
       }
     })
@@ -396,6 +437,8 @@ export const useCallStore = defineStore('call', () => {
   }
 
   function hangup() {
+    // Mark as intentional so reconnection doesn't trigger
+    intentionalHangup = true
     session.send({ type: 'callHangup' })
     status.value = String(i18n.global.t('call.callEnded'))
     stopRingtone()
@@ -522,6 +565,8 @@ export const useCallStore = defineStore('call', () => {
     }
 
     if (type === 'callEnded') {
+      // Server ended the call, mark as intentional to prevent reconnection
+      intentionalHangup = true
       status.value = String(i18n.global.t('call.callEnded'))
       resetCallState()
       return
@@ -644,6 +689,8 @@ export const useCallStore = defineStore('call', () => {
     })
 
     session.registerDisconnectHandler(() => {
+      // WebSocket disconnect, mark as intentional to avoid reconnect loop
+      intentionalHangup = true
       resetCallState()
       status.value = ''
     })
