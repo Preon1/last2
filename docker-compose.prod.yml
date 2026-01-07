@@ -3,8 +3,8 @@ services:
   caddy:
     image: caddy:2
     restart: unless-stopped
-    # logging:
-    #   driver: none
+    logging:
+      driver: none
     ports:
       - "80:80"
       - "443:443"
