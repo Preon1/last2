@@ -21,6 +21,21 @@ export const useUiStore = defineStore('ui', () => {
     return activeChatName.value ?? String(i18n.global.t('sidebar.groupChat'))
   })
 
+  const otherPrivateChatsUnread = computed(() => {
+    let count = 0
+    for (const [key, unread] of Object.entries(unreadByChat.value)) {
+      // Skip public chat (group)
+      if (key === 'group') continue
+      // Skip current chat
+      if (key === chatKey(activeChatName.value)) continue
+      // Only count private chats (keys starting with 'u:')
+      if (key.startsWith('u:')) {
+        count += unread
+      }
+    }
+    return count
+  })
+
   function isViewingChat(name: string | null) {
     if (view.value !== 'chat') return false
     return (activeChatName.value ?? null) === (name ?? null)
@@ -143,6 +158,7 @@ export const useUiStore = defineStore('ui', () => {
     replyToId,
     activeChatName,
     activeChatLabel,
+    otherPrivateChatsUnread,
     isViewingChat,
     openChat,
     goHome,

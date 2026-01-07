@@ -7,7 +7,7 @@ import SettingsTopBar from './SettingsTopBar.vue'
 import ChatCallButton from './ChatCallButton.vue'
 
 const ui = useUiStore()
-const { view } = storeToRefs(ui)
+const { view, otherPrivateChatsUnread } = storeToRefs(ui)
 const { t } = useI18n()
 </script>
 
@@ -21,6 +21,14 @@ const { t } = useI18n()
     >
       <svg class="icon" aria-hidden="true" focusable="false"><use xlink:href="/icons.svg#bracket-left"></use></svg>
     </button>
+    
+    <div
+      v-if="view === 'chat' && otherPrivateChatsUnread > 0"
+      class="floating-unread-badge"
+      :aria-label="String(t('common.unreadMessages', { count: otherPrivateChatsUnread }))"
+    >
+      {{ otherPrivateChatsUnread }}
+    </div>
 
     <ChatTopBar v-if="view === 'chat'" />
     <SettingsTopBar v-else />
