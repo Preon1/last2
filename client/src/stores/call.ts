@@ -78,10 +78,9 @@ export const useCallStore = defineStore('call', () => {
   let timerInterval: number | null = null
   let handlerInstalled = false
 
-  let ringtoneCtx: AudioContext | null = null
-  let ringtoneOsc: OscillatorNode | null = null
-  let ringtoneGain: GainNode | null = null
-  let ringtoneInterval: number | null = null
+  let incomingCallAudio: HTMLAudioElement | null = null
+  let callingAudio: HTMLAudioElement | null = null
+  let callingInterval: number | null = null
 
   // Automatic reconnection state
   let intentionalHangup = false
@@ -90,37 +89,22 @@ export const useCallStore = defineStore('call', () => {
   const MAX_RECONNECT_ATTEMPTS = 3
   const RECONNECT_DELAY_MS = 1000
 
-  function getAudioContextCtor(): typeof AudioContext | null {
-    return (window.AudioContext || (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext) ?? null
-  }
-
   function primeAudio() {
     // Mobile browsers (esp. iOS Safari) require a user gesture before audio can play.
     // Call this from a click/tap handler (e.g. Join button).
     try {
-      const Ctor = getAudioContextCtor()
-      if (!Ctor) return
-      if (!ringtoneCtx) ringtoneCtx = new Ctor()
-
-      // Resume if suspended (may still require gesture).
-      void ringtoneCtx.resume?.().catch(() => {})
-
-      // Create a short-lived silent node so the context is actually "used".
-      const osc = ringtoneCtx.createOscillator()
-      const gain = ringtoneCtx.createGain()
-      gain.gain.value = 0.0
-      osc.connect(gain)
-      gain.connect(ringtoneCtx.destination)
-      osc.start()
-      osc.stop(ringtoneCtx.currentTime + 0.02)
-      osc.onended = () => {
-        try {
-          osc.disconnect()
-          gain.disconnect()
-        } catch {
-          // ignore
-        }
+      // Prime audio elements by attempting to play them at volume 0
+      if (!incomingCallAudio) {
+        incomingCallAudio = new Audio('/incoming_call.wav')
+        incomingCallAudio.loop = true
       }
+      if (!callingAudio) {
+        callingAudio = new Audio('/calling.wav')
+      }
+      
+      // Attempt to load audio (gesture priming)
+      void incomingCallAudio.load()
+      void callingAudio.load()
     } catch {
       // ignore
     }
@@ -173,28 +157,13 @@ export const useCallStore = defineStore('call', () => {
   function startRingtone() {
     try {
       stopRingtone()
-      const Ctor = getAudioContextCtor()
-      if (!Ctor) return
-      ringtoneCtx = new Ctor()
-
-      // If the context is suspended (common on mobile), attempt resume.
-      void ringtoneCtx.resume?.().catch(() => {})
-
-      ringtoneOsc = ringtoneCtx.createOscillator()
-      ringtoneGain = ringtoneCtx.createGain()
-      ringtoneOsc.type = 'sine'
-      ringtoneOsc.frequency.value = 880
-      ringtoneGain.gain.value = 0.0
-      ringtoneOsc.connect(ringtoneGain)
-      ringtoneGain.connect(ringtoneCtx.destination)
-      ringtoneOsc.start()
-
-      let on = false
-      ringtoneInterval = window.setInterval(() => {
-        if (!ringtoneCtx || !ringtoneGain) return
-        on = !on
-        ringtoneGain.gain.setTargetAtTime(on ? 0.08 : 0.0, ringtoneCtx.currentTime, 0.01)
-      }, 350)
+      if (!incomingCallAudio) {
+        incomingCallAudio = new Audio('/incoming_call.wav')
+        incomingCallAudio.loop = true
+      }
+      incomingCallAudio.currentTime = 0
+      incomingCallAudio.volume = 0.5
+      void incomingCallAudio.play().catch(() => {})
     } catch {
       // ignore
     }
@@ -202,18 +171,60 @@ export const useCallStore = defineStore('call', () => {
 
   function stopRingtone() {
     try {
-      if (ringtoneInterval != null) window.clearInterval(ringtoneInterval)
-      ringtoneInterval = null
-      ringtoneOsc?.stop()
-      ringtoneOsc?.disconnect()
-      ringtoneGain?.disconnect()
-      ringtoneCtx?.close()
+      if (incomingCallAudio) {
+        incomingCallAudio.pause()
+        incomingCallAudio.currentTime = 0
+      }
+      stopCallingSound()
     } catch {
       // ignore
-    } finally {
-      ringtoneCtx = null
-      ringtoneOsc = null
-      ringtoneGain = null
+    }
+  }
+
+  function startCallingSound() {
+    try {
+      stopCallingSound()
+      if (!callingAudio) {
+        callingAudio = new Audio('/calling.wav')
+      }
+      
+      const playSound = () => {
+        if (callingAudio) {
+          callingAudio.currentTime = 0
+          callingAudio.volume = 0.5
+          void callingAudio.play().catch(() => {})
+        }
+      }
+      
+      playSound()
+      callingInterval = window.setInterval(playSound, 6000)
+    } catch {
+      // ignore
+    }
+  }
+
+  function stopCallingSound() {
+    try {
+      if (callingInterval != null) {
+        window.clearInterval(callingInterval)
+        callingInterval = null
+      }
+      if (callingAudio) {
+        callingAudio.pause()
+        callingAudio.currentTime = 0
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  function playCallInterruptedSound() {
+    try {
+      const audio = new Audio('/call_interrupted.wav')
+      audio.volume = 0.5
+      void audio.play().catch(() => {})
+    } catch {
+      // ignore
     }
   }
 
@@ -381,6 +392,7 @@ export const useCallStore = defineStore('call', () => {
         // Clear reconnection state on successful connection
         reconnectAttempts = 0
         clearReconnectTimer()
+        stopCallingSound()
         startTimerIfNeeded()
         const connectedLabel = String(i18n.global.t('call.connected'))
         if (status.value !== connectedLabel) status.value = connectedLabel
@@ -426,6 +438,7 @@ export const useCallStore = defineStore('call', () => {
     if (!roomId.value) {
       outgoingPending.value = true
       outgoingPendingName.value = toName
+      startCallingSound()
       status.value = toName
         ? String(i18n.global.t('call.callingNamed', { name: toName }))
         : String(i18n.global.t('call.calling'))
@@ -442,6 +455,7 @@ export const useCallStore = defineStore('call', () => {
     session.send({ type: 'callHangup' })
     status.value = String(i18n.global.t('call.callEnded'))
     stopRingtone()
+    playCallInterruptedSound()
     resetCallState()
   }
 
@@ -511,6 +525,8 @@ export const useCallStore = defineStore('call', () => {
       const reason = asString(obj.reason) ?? ''
       if (!ok) {
         if (outgoingPending.value && !roomId.value) {
+          stopCallingSound()
+          playCallInterruptedSound()
           outgoingPending.value = false
           outgoingPendingName.value = ''
           status.value = String(i18n.global.t('call.callFailed', { reason }))
@@ -556,6 +572,8 @@ export const useCallStore = defineStore('call', () => {
 
     if (type === 'callRejected') {
       if (outgoingPending.value && !roomId.value) {
+        stopCallingSound()
+        playCallInterruptedSound()
         outgoingPending.value = false
         outgoingPendingName.value = ''
         status.value = String(i18n.global.t('call.callRejected'))
@@ -568,12 +586,14 @@ export const useCallStore = defineStore('call', () => {
       // Server ended the call, mark as intentional to prevent reconnection
       intentionalHangup = true
       status.value = String(i18n.global.t('call.callEnded'))
+      playCallInterruptedSound()
       resetCallState()
       return
     }
 
     if (type === 'roomPeers') {
       roomId.value = asString(obj.roomId) ?? roomId.value
+      stopCallingSound()
       outgoingPending.value = false
       outgoingPendingName.value = ''
 
